@@ -1,0 +1,370 @@
+// vel2ph v1.0;
+/* VEL HS, stress formulation - see appendix from Masson et al, JMPS, 2020 */
+/* Loading : macroscopic strain and stress-free strain increments*/ 
+/* Purely deviatoric viscous compliance */
+@Parser    Implicit ;
+@Behaviour vel2phhs ;
+@Author   RM ;
+@Date 13122024 ;
+/* Configuration machines CEA PLEIADES */
+//- Sur machine buster, pleiades 119) :
+//source /soft/pleiades/testing/BUILDS/tfel-master/buster/x86_64/env.sh
+//- Sur Ubuntu (pleiades1057) :
+//source /soft/pleiades/codes/PREREQUIS/PREREQUIS-latest/env.sh
+// Compilation
+//mfront --obuild --interface=castem ./vel2ph_hs.mfront
+  
+@Epsilon 1.e-14 ;
+@UMATUseTimeSubStepping[castem] true;
+@UMATMaximumSubStepping[castem] 8;
+@Theta 1. ;
+
+/* Homogenization functions (linear viscoelasticity - Mori Tanaka) */
+@Includes{
+#include"TFEL/Material/DDIF2Base.hxx"
+  using namespace tfel::math ;
+#ifndef LIB_TEST_HEADER
+#define LIB_TEST_HEADER
+  void vel_2ph_mt(const tvector<2u, double>, const tvector<2u, double>, const double, const double [], const tvector<2u, double>, double [], double [], double [], const double) ;
+  void kemuebar(const tvector<2u, double>, const tvector<2u, double>, const tvector<2u, double>, double&, double&) ;
+#endif
+}
+
+/* Physical parameters */
+@Parameter hmue = 1. ;                      /* elastic shear heterogeneity inclusions 1 */
+hmue.setEntryName("ShearModulusContrast") ;
+@Parameter hke  = 1. ;                      /* elastic bulk heterogeneity inclusions 1 */
+hke.setEntryName("BulkModulusContrast") ;
+
+/* Numerical parameters - penalties */
+@Parameter grand = 1.e12 ;  // quasi-elastic behaviour
+
+/* Material properties */
+@MaterialProperty stress young ;      /* mandatory for castem */
+young.setGlossaryName("YoungModulus") ;
+@MaterialProperty real nu ;           /* mandatory for castem */
+nu.setGlossaryName("PoissonRatio") ;
+@MaterialProperty massdensity rho ;   /* mandatory for castem */
+rho.setGlossaryName("MassDensity") ;
+@MaterialProperty real fvamas ;       /* cluster (phase 2) volume fraction */
+fvamas.setEntryName("InclusionsVolumeFraction") ;
+@MaterialProperty real ecim ;         /* matrix material parameter - irradiation creep magnitude */
+ecim.setEntryName("MatrixViscousShear");//MatEtaIrradInCreep") ;
+@MaterialProperty real ecih ;         /* inclusions material parameter - irradiation creep magnitude */
+ecih.setEntryName("InclusionsViscousShear");
+
+/* Local variable: used in @InitLocalVar, @Integrator, @UpdateAuxiliaryStateVariables */
+@LocalVariable stress kel[2] ;         /* elastic bulk modulus per phase */
+@LocalVariable stress muel[2] ;        /* elastic shear modulus per phase */
+@LocalVariable stress kelbar ;         /* effective elastic bulk modulus */
+@LocalVariable stress muelbar ;        /* effective elastic shear modulus */
+@LocalVariable real lambdaelbar ;      /* elastic shear modulus */
+@LocalVariable real c[2] ;             /* volume fraction per phase */
+@LocalVariable Stensor d_alpha_d[3] ; /* macroscopic internal variables increments */
+@LocalVariable real d_alpha_m ;       /* macroscopic internal variables increments */
+@LocalVariable Stensor d_ev ;         /* macroscopic viscous strain increment */
+@LocalVariable Stensor d_eps0_macr ;  /* macroscopic stress-free-strain increment */
+@LocalVariable strain d_eel_m[2] ;    /* mean elastic dilatation strain per phase increments */
+@LocalVariable Stensor d_eel_d[2] ;   /* mean elastic deviatoric strain per phase increments */
+@LocalVariable Stensor d_eps[2] ;     /* mean strain per phase increments */
+@LocalVariable stress d_shat_1 ;      /* matrix fluctuations increment */
+@LocalVariable real d_gamma ;
+@LocalVariable Stensor d_xi[2] ;
+@LocalVariable Stensor d_beta ;
+
+/* External loading: stress-free strains */
+@ExternalStateVariable real fssm ;
+fssm.setEntryName("MatrixSwelling") ;
+@ExternalStateVariable real fssh ;
+fssh.setEntryName("ClusterSwelling") ;
+
+/* Macroscopic internal variables : eel only*/
+
+/* Internal and auxiliary variables */
+@AuxiliaryStateVariable StrainStensor beta ;
+beta.setEntryName("var_beta") ;
+@AuxiliaryStateVariable StrainStensor alpha_d[3] ;
+alpha_d.setEntryName("var_alpha") ;
+@AuxiliaryStateVariable real alpha_m ;
+alpha_m.setEntryName("var_alpham") ;
+@AuxiliaryStateVariable StrainStensor eps0_macr ;
+eps0_macr.setEntryName("eps0_macr") ;
+/* Average stress per phase: hydrostatic part */
+@AuxiliaryStateVariable real sig_m[2] ;
+sig_m.setEntryName("var_sigm") ;
+/* Average stress per phase: deviatoric part */
+@AuxiliaryStateVariable Stensor sig_d[2] ;
+sig_d.setEntryName("var_sigd") ;
+/* Stress field fluctuations in the matrix */
+@AuxiliaryStateVariable real shat_1 ;
+shat_1.setEntryName("var_shat1") ;
+/* Macroscopic viscoplastic strain */
+@AuxiliaryStateVariable StrainStensor ev ;
+ev.setEntryName("vp_strain") ;
+/* Average elastic dilatation per phase */
+@AuxiliaryStateVariable real eel_m[2] ;
+eel_m.setEntryName("var_eelm") ;
+/* Average elastic deviatoric strain per phase */
+@AuxiliaryStateVariable StrainStensor eel_d[2] ;
+eel_d.setEntryName("var_eeld") ;
+@AuxiliaryStateVariable StrainStensor eps[2] ; /* Average strain per phase */
+eps.setEntryName("var_eps") ;
+@AuxiliaryStateVariable real gamma ; 
+gamma.setEntryName("var_gamma") ;
+@AuxiliaryStateVariable Stensor xi[2] ;
+xi.setEntryName("var_xi") ;
+@AuxiliaryStateVariable real tilde_w_prev;
+tilde_w_prev.setEntryName("tilde_w_prev");
+
+// Potentials
+@AuxiliaryStateVariable real tilde_w_out ;
+tilde_w_out.setEntryName("tilde_w") ;
+@AuxiliaryStateVariable real tilde_d_out ;
+tilde_d_out.setEntryName("tilde_d") ;
+
+/* Initialize materials coefficients */
+@InitLocalVariables{
+  /* Volume fractions */
+  c[0] = 1.-fvamas;
+  c[1] = fvamas;
+  /* Elastic moduli */
+  kel[0]  = young/(3.*(1.-2.*nu)) ;
+  muel[0] = young/(2.*(1.+nu)) ;
+  kel[1]  = hke*kel[0] ;
+  muel[1] = hmue*muel[0] ;
+  kemuebar(kel,muel,c,kelbar,muelbar);
+  /* The elastic moduli must be well defined */
+  if (tfel::math::ieee754::isnan(muelbar)||tfel::math::ieee754::isnan(kelbar)) throw(std::runtime_error("MoxBiphase::integrate: One of the elastic moduli is NaN")) ;
+  /* The swelling must be well defined */
+  if (tfel::math::ieee754::isnan(dfssm)||tfel::math::ieee754::isnan(dfssh)) throw(std::runtime_error("MoxBiphase::integrate: One of the swellings is NaN"));
+  lambdaelbar = kelbar-muelbar/1.5 ;
+}
+
+@Integrator{  
+  real dfss[2] = {dfssm,dfssh},
+       eci[2] = {ecim,ecih};
+  kemuebar(kel,muel,c,kelbar,muelbar);
+  real bde2 = muel[1]/muel[0]*(20*muel[0]+15.*kel[0])/(9.*c[0]*kel[0]+(9.*c[1]+6.)*muel[1]*kel[0]/muel[0]+8.*c[0]*muel[0]+(8.*c[1]+12.)*muel[1]);
+  /* Homogenization - see Appendix from Masson et al, JMPS, 2020*/
+  real mu_v[2] ; /* deviatoric creep coeff per phase */
+  for (unsigned short j=0 ; j<2 ; j++) mu_v[j] = eci[j] ;
+  /* The viscous shears must be well defined */
+  if (tfel::math::ieee754::isnan(mu_v[0])||tfel::math::ieee754::isnan(mu_v[1])) throw(tfel::material::DivergenceException("MoxBiphase::integrate: One of the viscous shear moduli is NaN")) ;
+  /*The viscous shear moduli must be positive */
+  if ((mu_v[0]<0.)||(mu_v[1]<0.)) throw(tfel::material::DivergenceException("MoxBiphase::integrate: One of the viscous shear moduli is <0")) ;
+  /* Homogenization */
+  real taud_v[3],        /* effective behaviour : creep */
+       mutaud[2],        /* effective behaviour :  */        
+       bd[2];            /* effective behaviour :  */     
+  try{vel_2ph_mt(muel,kel,muelbar,mu_v,c,taud_v,mutaud,bd,bde2) ;}
+  catch (tfel::material::DivergenceException){
+#ifdef DEBUGGING
+    cout << "Error in the homogenization process, try again in the same search direction" << endl; 
+#endif
+    return false ;
+  }
+  /* Mean Stresses per phase */
+  StrainStensor deel_dev = deviator(deel), eel_ = eel+deel, eel_dev_ = deviator(eel_);
+  real eel_tr_ = trace(eel_), eel_sph_ = eel_tr_/3., eel_sph = trace(eel)/3., 
+       tau_gamma = mu_v[0]*(1./muel[0]+(c[0]*kel[0]+c[1]*kel[1])/(0.75*kel[0]*kel[1])), // Stress-free strain;
+       var1 = dt/(dt+tau_gamma),
+       var2 = c[0]/(c[0]*kel[0]+c[1]*kel[1]+3.*kel[0]*kel[1]/(4.*muel[0])),
+       bme2 = kel[1]*(muel[0]/0.75+kel[0])/(muel[0]*(c[0]*kel[0]+c[1]*kel[1])/0.75+kel[0]*kel[1]);
+  d_beta = Stensor(real(0.)) ;
+  for (unsigned short i=0 ; i<2 ; i++){
+    d_xi[i] = dt/(taud_v[i]+dt)*(bd[i]*eel_dev_-xi[i]) ;
+    d_beta = d_beta + d_xi[i];
+  }
+  // Spheric part
+  d_beta = d_beta + var1*((var2*(kel[0]-kelbar)*eel_sph_+bme2*eel_sph)*kelbar/kel[1]+kel[0]*var2*tau_gamma*(dfss[0]-dfss[1])/dt-eel_m[1])*Stensor::Id() ;
+  
+  /* Mean per phase deviatoric elastic strains and stresses */
+  d_eel_d[1] = muelbar/muel[1]*bde2*deel_dev+deviator(d_beta) ;
+  d_eel_d[0] = (muelbar*deel_dev-c[1]*muel[1]*d_eel_d[1])/(c[0]*muel[0]) ;
+  Stensor d_sig_d[2],    /* mean deviatoric stress per phase increments */
+          sig_d_[2] ;
+  for (unsigned short j=0 ; j<2 ; j++){
+    d_sig_d[j] = 2*muel[j]*d_eel_d[j] ;  
+    sig_d_[j] = sig_d[j]+d_sig_d[j] ;
+  }
+  /* Mean elastic dilatation strains and hydrostatic stresses per phase */
+  real deel_sph = trace(deel)/3. ;
+  //strain d_eel_m[2] ;  /* mean elastic dilatation strain per phase increments */
+  d_eel_m[1] = kelbar/kel[1]*bme2*deel_sph+trace(d_beta)/3. ;
+  d_eel_m[0] = (kelbar*deel_sph-c[1]*kel[1]*d_eel_m[1])/(c[0]*kel[0]) ;
+  stress d_sig_m[2],   /* mean hydrostatic stress per phase increments */
+         sig_m_[2] ;
+  for (unsigned short j=0 ; j<2 ; j++){
+    d_sig_m[j] = 3.*kel[j]*d_eel_m[j] ; 
+    sig_m_[j] = sig_m[j]+d_sig_m[j] ;
+  }
+  
+  /* Mean per phase strain increments */
+  for (unsigned short j=0 ; j<2 ; j++) d_eps[j] = d_eel_d[j]+dt/(2.*mu_v[j])*sig_d_[j]+(d_eel_m[j]+dfss[j])*Stensor::Id() ; 
+
+  /* Effective freestrain */
+  real bm12 = c[0]*(kel[0]-kel[1])/(c[0]*kel[0]+c[1]*kel[1]+0.75*kel[0]*kel[1]/muel[0]);
+  d_gamma = var1*(c[1]*bm12*tau_gamma*(dfss[0]-dfss[1])/dt-gamma); /* Stress-free strain, sign correction (JMPS2024-II)!!! */
+  d_eps0_macr = d_gamma*Stensor::Id();  /* macroscopic stress-free-strain increment */
+  for (unsigned short j=0; j<2; j++) d_eps0_macr += (dfss[j]*c[j])*Stensor::Id();
+  
+  /* Macroscopic stress*/
+  sig = kelbar*eel_tr_*StrainStensor::Id()+2*muelbar*eel_dev_ ;
+  real var4 = 0., tauv[2] ; 
+  for (unsigned short j=0 ; j<2 ; j++){
+    var4 += c[j]*(3.*(dfss[j]+d_eel_m[j])*sig_m_[j]+(d_eel_d[j]|sig_d_[j])+dt/(2.*mu_v[j])*(sig_d_[j]|sig_d_[j]));
+    tauv[j] = mu_v[j]/muel[j] ;
+  }
+  /* Stress field fluctuations in the matrix */
+  d_shat_1 = (2.*mu_v[0]/(c[0]*dt)*(((deto)|sig)-var4)-shat_1)/(tauv[0]/(2.*dt)+1.);
+  /* The fluctuations must be positive*/
+  if (d_shat_1<-shat_1) d_shat_1 = 0. ;
+
+  /* Macroscopic internal variables */
+  d_ev = Stensor(real(0.)) ; /* macroscopic viscous strain increment */
+  for (unsigned short i=0 ; i<3 ; i++){
+    if (i<2) d_alpha_d[i] = dt/(taud_v[i]+dt)*(2*muelbar*taud_v[i]*mutaud[i]*eel_dev_-alpha_d[i]) ;
+    else d_alpha_d[i] = dt/taud_v[i]*eel_dev_ ;
+    d_ev += d_alpha_d[i] ;
+  }
+  real taum1 = tauv[0] * (4./3.* muel[0] * kelbar / (kel[0] * kel[1]) + 1);
+  real mm1 = c[1]*(1./kel[1]-1./kel[0])*bm12/3.; // mm * taum1
+  d_alpha_m = var1*(3.*kelbar*mm1*tau_gamma*eel_sph_-alpha_m) ;
+  d_ev += d_alpha_m*Stensor::Id();
+  
+  feel += d_eps0_macr+d_ev-deto ;
+
+  /* Energy and dissipation potential computation */
+
+  // Free energy
+  Stensor sig_dev = deviator(sig);
+  StrainStensor eel_dev = deviator(eel);
+  
+  real tilde_w = 0.5 * (sig | eel); 
+  for (unsigned short i=0; i<2; ++i){
+    real denom = taud_v[i]*mutaud[i];
+    tilde_w += 0.5 * (1.0/denom) * (alpha_d[i] | alpha_d[i]);
+  }
+  // Contribution volumique (macroscopic alpha_m)
+if (std::abs(mm1) > 1e-16) {  // tolérance très petite
+    tilde_w += 0.5 * 3.0 * alpha_m * alpha_m / (mm1);
+} else {
+    // Si le dénominateur est nul ou trop petit, on ignore ce terme
+    tilde_w += 0.0;
+}
+  // Dissipation
+  real muvbar = mu_v[0]*(1. + c[1]/(mu_v[0]/(mu_v[1]-mu_v[0]) + 0.4*c[0]));
+  real tilde_d = (sig_dev | sig_dev) / (2.0*muvbar);
+  for (unsigned short i=0; i<2; ++i){
+  real md = mutaud[i];
+  StrainStensor dot_alpha_i = d_alpha_d[i] / dt;
+  tilde_d += (dot_alpha_i | dot_alpha_i)/md;
+}
+// Contribution volumique à la dissipation
+real dot_alpha_m = d_alpha_m / dt;
+if (std::abs(mm1 * taum1 ) > 1e-16) {  // tolérance très petite pour éviter division par zéro
+    tilde_d += 3.0 * dot_alpha_m * dot_alpha_m / (mm1/taum1);
+} else {
+    // Si mm1 est nul, on considère que la contribution volumique est nulle
+    tilde_d += 0.0;
+}
+// Export
+  tilde_d_out = tilde_d;
+  tilde_w_out = tilde_w; 
+
+// --- Hill check ---
+real sigma_dot_eps = sig | deto;  // contraction sigma : d_epsilon
+real delta_w = tilde_w_out - tilde_w_prev;  // Δw sur le pas de temps
+
+// Hill lemma residual
+real hill_residual = sigma_dot_eps - (delta_w + tilde_d * dt);  
+
+cout << "Hill check: sigma:e = " << sigma_dot_eps
+     << ", Δw + dt * d = " << (delta_w + dt * tilde_d)
+     << ", residual = " << hill_residual << endl;
+cout << "delta w " << delta_w << endl;
+cout << "d * dt" << tilde_d * dt << endl;
+cout << "dt " << dt << endl;
+real hill_residual_norm = hill_residual / (std::abs(sigma_dot_eps) + 1e-20);
+cout << "Hill check (relative) = " << hill_residual_norm << endl;
+}
+
+
+@ComputeFinalStress{
+  sig = kelbar*trace(eel)*StrainStensor::Id()+2*muelbar*deviator(eel) ;
+}
+
+@UpdateAuxiliaryStateVariables{
+  /* Effective creep */
+  alpha_d += d_alpha_d ;
+  /* Effective creep */
+  alpha_m += d_alpha_m ;
+  /* Beta */
+  beta += d_beta ;
+  /* Mean elastic dilatation per phase*/
+  eel_m += d_eel_m ;
+  /* Mean Hydrostatic stresses per phase*/
+  for (unsigned short j=0 ; j<2 ; j++) sig_m[j] = 3*kel[j]*eel_m[j] ;
+  /* Stress fluctuations in matrix phase*/
+  shat_1 += d_shat_1 ;
+  /* Mean elastic deviatoric strains per phase*/
+  eel_d += d_eel_d ;
+  /* Mean deviatoric stresses per phase*/
+  for (unsigned short j=0 ; j<2 ; j++) sig_d[j] = 2*muel[j]*eel_d[j] ;
+  /* Mean strain per phase */
+  eps += d_eps ; 
+  /* Effective free-strain */
+  eps0_macr += d_eps0_macr ;
+  /* Effective creep strain */
+  ev += d_ev ;
+  gamma += d_gamma;
+  xi += d_xi ;
+  tilde_w_prev = tilde_w_out;
+}
+
+/* Homogenization */
+@Sources{
+  #include<iostream>
+  using namespace std ;
+  
+  void vel_2ph_mt(const tvector<2u, double> mue, const tvector<2u, double> ke, const double muebar, const double muv[],
+                    const tvector<2u, double> fv, double taudv[], double mutaud[], double bd[], const double bde2){
+    double tauv[2] ;
+    for (unsigned short j=0 ; j<2 ; j++) tauv[j] = muv[j]/mue[j] ;
+    // Shear creep function
+    // (a * p2 + b * p + c)
+    double c = ((15-9*fv[0])*mue[1]*tauv[1]+9*fv[0]*mue[0]*tauv[0])*ke[1] ;
+    double b = ((((20-8*fv[0])*mue[0]+(30-18*fv[0])*ke[1])*mue[1]+9*fv[0]*ke[1]*mue[0])*tauv[1]+(8*fv[0]*mue[0]+9*fv[0]*ke[1])*mue[0]*tauv[0])*tauv[0] ;
+    double a = (((20-8*fv[0])*mue[0]+(15-9*fv[0])*ke[1])*mue[1]+(8*mue[0]+9*ke[1])*fv[0]*mue[0])*tauv[0]*tauv[0]*tauv[1] ;
+    double delta = b*b-4.*a*c ;
+    if (delta <= 0.){
+#ifdef DEBUGGING
+      throw(tfel::material::DivergenceException("MoxBiphase::integrate:" "vel_2ph_mt:degenerate case (effective shear modulus)")) ;
+#else
+      throw(tfel::material::DivergenceException()) ;
+#endif
+    }
+    taudv[0] = (b+sqrt(delta))/(2.*c) ;
+    taudv[1] = 2.*a/(b+sqrt(delta)) ;
+    double muvbar = muv[0]*(1+fv[1]/(muv[0]/(muv[1]-muv[0])+0.4*fv[0])) ;
+    taudv[2] = muvbar/muebar ;
+    double taud = tauv[0]*(1.+4.*mue[0]/(3.*ke[0])) ;
+    bd[0] = bde2*(taudv[1]*(taudv[0]/tauv[0]-1.)*(taudv[0]/taud-1.))/(taudv[0]-taudv[1]) ;
+    bd[1] = bde2*(taudv[0]*(taudv[1]/tauv[0]-1.)*(taudv[1]/taud-1.))/(taudv[1]-taudv[0]) ;
+    for (unsigned short i=0 ; i<2 ; i++) mutaud[i] = fv[1]*bd[i]*((1/mue[1]-1/mue[0])/taudv[i]-(1/muv[1]-1/muv[0]))/2 ;
+    if ((taudv[0] < 0.)||(taudv[1] < 0.)||(taudv[2] < 0.)){
+#ifdef DEBUGGING
+      throw(tfel::material::DivergenceException("MoxBiphase::integrate:" "In vel_2ph_mt : one of the taui<zero!")) ;
+#else
+      throw(tfel::material::DivergenceException()) ;
+#endif
+    }
+  }
+  
+  void kemuebar(const tvector<2u, double> ke, const tvector<2u, double> mue, const tvector<2u, double> fv, double& kebar, double& muebar){
+    kebar = ke[0]+fv[1]*(ke[1]-ke[0])/(1.+fv[0]*(ke[1]-ke[0])/(mue[0]/0.75+ke[0]));
+    double muechap = mue[0]/6.*(9.*ke[0]+8.*mue[0])/(ke[0]+2.*mue[0]);
+    muebar = mue[0]+fv[1]*(mue[1]-mue[0])/(1.+fv[0]*(mue[1]-mue[0])/(muechap+mue[0]));
+  }
+}
+

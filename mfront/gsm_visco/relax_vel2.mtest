@@ -1,0 +1,34 @@
+@Author Masson Renaud;
+@Date 13 decembre 2024;
+@Description{
+"Uniaxial relaxation test"
+"mtest vel1.mtest"
+"FE results in vel1.dat"
+"gnuplot vel1.gnu"
+"Reference values in vel1.ref"
+};
+
+// Loading
+@Real 'tcharge' 0.0001;
+//* The constitutive law
+@Behaviour<umat> './src/libUmatBehaviour.so' 'umatvel2phhs' ;
+@MaterialProperty<constant> 'YoungModulus' 200.0e9 ;
+@MaterialProperty<constant> 'PoissonRatio' 0.31 ;
+@Parameter 'ShearModulusContrast' 1. ; //mue inclusions = 1* mue matrix
+@Parameter 'BulkModulusContrast' 1. ;  //ke inclusions = 1* ke matrix
+@MaterialProperty<constant> 'MassDensity' 0. ; //* needed but no importance
+@MaterialProperty<constant> 'InclusionsVolumeFraction' 0.15;
+@MaterialProperty<constant> 'MatrixViscousShear' '64.3*1.e9' ;
+@MaterialProperty<constant> 'InclusionsViscousShear' '21.43*1.e9' ;
+//* No prescribed stress-free strain
+@ExternalStateVariable 'MatrixSwelling' {0.0:0.0, 'tcharge':0.0, 10.0:0.0};
+@ExternalStateVariable 'ClusterSwelling' {0.0:0.0, 'tcharge':0.0, 10.0:0.0};
+//* Constant temperature 
+@ExternalStateVariable 'Temperature' 300.0; // Temperature in Kelvin
+//* Mechanical Loading
+@ImposedStrain 'EXY' {0. : 0., 'tcharge' : 0.02, 10.0 : 0.02};
+//* Time discretization
+@Times {0., 'tcharge' in 40, 10.0 in 100};
+@UseCastemAccelerationAlgorithm true;
+@UserDefinedPostProcessing 'relax_gt.res' {'EXY', 'SXY'} ;
+

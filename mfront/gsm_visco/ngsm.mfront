@@ -1,0 +1,151 @@
+// @DSL Implicit;
+@DSL DefaultDSL;
+@Behaviour NeuralGSM;
+@Author Marius Duvillard;
+@Date 15 / 01 / 2026;
+@Description {
+  "Behaviour based on a neural GSM multi-function TensorFlow neural network"
+}
+
+@ModellingHypothesis Tridimensional;
+
+@Link {"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+
+@Includes {
+#ifndef LIB_MFRONT_TENSORFLOW
+#define LIB_MFRONT_TENSORFLOW 1
+
+#include "cppflow/cppflow.h"
+#include <vector>
+#include <iostream>
+
+struct NN {
+    inline NN(const std::string &model_path)
+        : model(model_path) {}
+
+    // --- Stress ---
+    inline tfel::math::stensor<3u, double> stress(
+        const tfel::math::stensor<3u, double> &strain,
+        const tfel::math::fsarray<3, tfel::math::stensor<3u, double>> &alpha)
+    {
+        cppflow::tensor epsilon_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+        std::vector<double> alpha_data;
+        alpha_data.reserve(3 * 6);
+
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 6; ++j) {
+                alpha_data.push_back(alpha[i][j]);
+            }
+        }
+        cppflow::tensor alpha_tf(
+        alpha_data,
+        {3, 6}
+        );
+
+        auto outputs = model({
+            {"stress_epsilon:0", epsilon_tf},
+            {"stress_alpha:0", alpha_tf}
+        }, {"PartitionedCall_1:0"});
+        cppflow::tensor &out = outputs[0];
+
+        tfel::math::stensor<3u, double> stress;
+        auto data = out.get_data<double>();
+        for (size_t i = 0; i < 6; i++)
+            stress[i] = data[i];
+
+        return stress;
+    }
+
+    // --- Tangent operator ---
+    inline tfel::math::st2tost2<3u, double>
+    tangentop(const tfel::math::stensor<3u, double>& strain,
+    const tfel::math::fsarray<3, tfel::math::stensor<3u, double>> &alpha)
+    {
+        cppflow::tensor epsilon_tf(
+            std::vector<double>(strain.begin(), strain.end()), {6}
+        );
+        
+        std::vector<double> alpha_data;
+        alpha_data.reserve(3 * 6);
+
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 6; ++j) {
+                alpha_data.push_back(alpha[i][j]);
+            }
+        }
+        cppflow::tensor alpha_tf(
+        alpha_data,
+        {3, 6}
+        );
+
+        auto outputs = model({
+            {"tangentop_epsilon:0", epsilon_tf},{"tangentop_alpha:0", alpha_tf}
+        }, {"PartitionedCall_2:0"} // tangentop
+        );
+
+        auto data = outputs[0].get_data<double>();
+
+        tfel::math::st2tost2<3u, double> K;
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                K(i, j) = data[i * 6 + j];
+
+        return K;
+    }
+
+    // --- dalpha ---
+    inline tfel::math::fsarray<3, tfel::math::stensor<3u, double>> dalpha(
+        const tfel::math::stensor<3u, double> &strain,
+        const tfel::math::fsarray<3, tfel::math::stensor<3u, double>> &alpha)
+    {
+        cppflow::tensor epsilon_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+        std::vector<double> alpha_data;
+        alpha_data.reserve(3 * 6);
+
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 6; ++j) {
+                alpha_data.push_back(alpha[i][j]);
+            }
+        }
+        cppflow::tensor alpha_tf(
+        alpha_data,
+        {3, 6}
+        );
+
+        std::vector<std::tuple<std::string, cppflow::tensor>> inputs = {
+            {"dalpha_epsilon:0", epsilon_tf},
+            {"dalpha_alpha:0", alpha_tf}
+        };
+        std::vector<std::string> outputs_names = {"PartitionedCall:0"};
+
+        auto outputs = model(inputs, outputs_names);
+        cppflow::tensor &out = outputs[0];
+
+        auto data = out.get_data<double>();
+        size_t Nvar = alpha.size();
+        // std::vector<std::vector<double>> result(Nvar, std::vector<double>(6));
+        tfel::math::fsarray<3, tfel::math::stensor<3u, double>> dalpha;
+        for (size_t i = 0; i < Nvar; i++)
+            for (size_t j = 0; j < 6; j++)
+                dalpha[i][j] = data[i*6 + j];
+
+        return dalpha;
+    }
+
+private:
+    cppflow::model model;
+};
+
+#endif /* LIB_MFRONT_TENSORFLOW */
+}
+@StateVariable StrainStensor alpha[3];
+@ProvidesTangentOperator;
+
+@Integrator {
+    // Instantiate the neural network (static to load only once)
+    static NN nn("/DISK2/md266594/Workspace/jax2mfront/gsm_model");
+    dalpha = nn.dalpha(eto + deto, alpha) * dt;
+    sig = nn.stress(eto + deto, alpha + dalpha); 
+    Dt = nn.tangentop(eto + deto, alpha + dalpha);
+}
