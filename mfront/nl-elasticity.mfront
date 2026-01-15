@@ -1,0 +1,98 @@
+@DSL DefaultDSL;
+@Behaviour NeuralElasticity;
+@Author Marius Duvillard;
+@Date 18 / 12 / 2025;
+@Description {
+  "Behaviour based on a TensorFlow neural network for Non linear elasticity."
+}
+
+@ModellingHypothesis Tridimensional;
+
+@Link {"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+
+@Includes {
+#ifndef LIB_MFRONT_TENSORFLOW
+#define LIB_MFRONT_TENSORFLOW 1
+
+#include "cppflow/cppflow.h"
+#include <vector>
+#include <iostream>
+
+// ==================================================================
+// NN class wraps the TensorFlow model and provides stress & tangent
+// computation from strain input
+// ==================================================================
+struct NN {
+    // Constructor: load the TensorFlow model from the given path
+    inline NN(const std::string& model_path)
+      : model(model_path) {}
+
+    // =====================================================
+    // Compute stress given a strain tensor
+    // =====================================================
+    inline tfel::math::stensor<3u, double>
+    stress(const tfel::math::stensor<3u, double>& strain)
+    {
+        // Convert strain from MFront tensor to a flat TensorFlow tensor
+        cppflow::tensor epsilon_tf(
+            std::vector<double>(strain.begin(), strain.end()), {6}
+        );
+
+        // Run the model: input is 'stress_epsilon:0', output is 'PartitionedCall:0' (stress)
+        // Extract data from the TensorFlow tensor as a std::vector<double>
+        auto data = model(
+            {{"stress_epsilon:0", epsilon_tf}},
+            {"PartitionedCall:0"}   // stress output tensor
+        )[0].get_data<double>();
+
+        // Copy the 6 components back into a tfel stress tensor
+        tfel::math::stensor<3u, double> sig;
+        for (size_t i = 0; i < 6; ++i)
+            sig[i] = data[i];
+
+        return sig;
+    }
+
+    // =====================================================
+    // Compute tangent operator (6x6) given a strain tensor
+    // =====================================================
+    inline tfel::math::st2tost2<3u, double>
+    tangentop(const tfel::math::stensor<3u, double>& strain)
+    {   
+        // Convert strain tensor to TensorFlow tensor
+        cppflow::tensor epsilon_tf(
+            std::vector<double>(strain.begin(), strain.end()), {6}
+        );
+
+        // Run the model: input is 'tangentop_epsilon:0', output is 'PartitionedCall_1:0' (tangentop)
+        auto data = model(
+            {{"tangentop_epsilon:0", epsilon_tf}},
+            {"PartitionedCall_1:0"} // tangentop
+        )[0].get_data<double>();
+        // Copy data into a 6x6 MFront tangent operator
+        tfel::math::st2tost2<3u, double> K;
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                K(i, j) = data[i * 6 + j];
+
+        return K;
+    }
+
+private:
+    cppflow::model model; // The TensorFlow model instance
+};
+#endif /* LIB_MFRONT_TENSORFLOW */
+
+}
+
+@ProvidesTangentOperator;
+
+@Integrator {
+    // Instantiate the neural network (static to load only once)
+    static NN nn("../nl_model");
+    
+    // Compute the stress and tangent operator for the current strain
+    sig = nn.stress(eto + deto);
+    Dt  = nn.tangentop(eto + deto);
+}

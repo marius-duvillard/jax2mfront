@@ -1,0 +1,18 @@
+@Author Marius Duvillard;
+@Date 18/12/2025;
+@Description{
+"test nl elasticity"
+};
+
+
+@Behaviour<generic> './src/libBehaviour.so' 'NeuralElasticity';  // 'RambergOsgoodNonLinearElasticity' or 'NeuralElasticity'
+
+
+@MaximumNumberOfSubSteps 30;
+
+@ExternalStateVariable 'Temperature' 293.15;
+
+@ImposedStrain 'EXY' {0.:0.0,100:0.01};
+
+@Times {0.,100 in 100};
+@UserDefinedPostProcessing 'shear_test_nn.res' {'EXY', 'SXY'} ;

@@ -1,0 +1,18 @@
+# Exclude include and src directories
+**/include/
+**/src/
+
+# Exclude folders starting with cppflow and libtensorflow
+cppflow*/
+libtensorflow*/
+
+# Python cache and type hints
+__pycache__/
+.mypy_cache/
+
+# Optional: Ignore temporary files
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.DS_Store
