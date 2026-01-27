@@ -63,7 +63,7 @@ source .venv/jax2mfront/bin/activate
 pip install -r requirements.txt
 ```
 
-The notebook [convert_model.ipynb](convert_model.ipynb) explains how to train a model to learn a non-linear elastic law, and how to convert the Equinox/Jax PyTree model class to produce the [nl_model](nl_model) repository containing all the required neural network graphs and weights.
+The notebook [train_convert_nlelastic.ipynb](train_convert_nlelastic.ipynb) explains how to train a model to learn a non-linear elastic law, and how to convert the Equinox/Jax PyTree model class to produce the [nl_model](nl_model) repository containing all the required neural network graphs and weights.
 
 # MFront Law
 

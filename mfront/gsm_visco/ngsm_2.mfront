@@ -1,0 +1,332 @@
+// @DSL Implicit;
+@DSL ImplicitII;
+@Behaviour NeuralGSM;
+@Author Marius Duvillard;
+@Date 21 / 01 / 2026;
+@Description {
+  "Behaviour based on a neural GSM multi-function TensorFlow neural network"
+}
+
+@Theta 1.0;
+@ModellingHypothesis Tridimensional;
+@StateVariable StrainStensor alpha;
+@Epsilon 1.e-16;
+@Link {"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+// @CompareToNumericalJacobian true;
+// @JacobianComparisonCriterion 1.e-10;
+// @PerturbationValueForNumericalJacobianComputation 1e-8;
+
+@Includes {
+#ifndef LIB_MFRONT_TENSORFLOW
+#define LIB_MFRONT_TENSORFLOW 1
+
+#include "cppflow/cppflow.h"
+#include <vector>
+#include <iostream>
+
+struct NN {
+    inline NN(const std::string &model_path)
+        : model(model_path) {}
+
+    // --- Phi1 ---
+    inline std::tuple<
+    tfel::math::stensor<3u,double>,
+    tfel::math::st2tost2<3u,double>,
+    tfel::math::st2tost2<3u,double>
+> phi1_and_derivatives(
+        const tfel::math::stensor<3u, double> &strain,
+        const tfel::math::stensor<3u, double> &alpha)
+    {
+        cppflow::tensor epsilon_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+        cppflow::tensor alpha_tf(std::vector<double>(alpha.begin(), alpha.end()), {6});
+
+        // The labeling is automatic check with 
+        //saved_model_cli show --dir gsm_model2/ --tag_set serve --signature_def phi1
+        auto outputs = model({{"phi1_epsilon:0", epsilon_tf},
+                      {"phi1_alpha:0", alpha_tf}},
+                     {"PartitionedCall:2", "PartitionedCall:1", "PartitionedCall:0"}); 
+
+        cppflow::tensor &phi1_tf  = outputs[0];
+        cppflow::tensor &dphi1_dx_tf = outputs[1];
+        cppflow::tensor &dphi1_dy_tf = outputs[2];
+
+        tfel::math::stensor<3u, double> phi1_val;
+        auto data_phi1 = phi1_tf.get_data<double>();
+        for (size_t i = 0; i < 6; i++)
+            phi1_val[i] = data_phi1[i];
+
+        tfel::math::st2tost2<3u, double> dphi1_dx;
+        auto data_dx = dphi1_dx_tf.get_data<double>();
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                dphi1_dx(i, j) = data_dx[i * 6 + j];
+
+        tfel::math::st2tost2<3u, double> dphi1_dy;
+        auto data_dy = dphi1_dy_tf.get_data<double>();
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                dphi1_dy(i, j) = data_dy[i * 6 + j];
+
+        return {phi1_val, dphi1_dx, dphi1_dy};
+    }
+
+    // Phi2
+        inline std::tuple<
+    tfel::math::stensor<3u,double>,
+    tfel::math::st2tost2<3u,double>,
+    tfel::math::st2tost2<3u,double>
+> phi2_and_derivatives(
+        const tfel::math::stensor<3u, double> &strain,
+        const tfel::math::stensor<3u, double> &alpha)
+    {
+        cppflow::tensor epsilon_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+        cppflow::tensor alpha_tf(std::vector<double>(alpha.begin(), alpha.end()), {6});
+
+        // The labeling is automatic check with 
+        //saved_model_cli show --dir gsm_model2/ --tag_set serve --signature_def phi2
+        auto outputs = model({{"phi2_epsilon:0", epsilon_tf},
+                      {"phi2_alpha:0", alpha_tf}},
+                     {"PartitionedCall_1:0", "PartitionedCall_1:2", "PartitionedCall_1:1"});
+
+        cppflow::tensor &phi2_tf  = outputs[0];
+        cppflow::tensor &dphi2_dx_tf = outputs[1];
+        cppflow::tensor &dphi2_dy_tf = outputs[2];
+
+        tfel::math::stensor<3u, double> phi2_val;
+        auto data_phi2 = phi2_tf.get_data<double>();
+        for (size_t i = 0; i < 6; i++)
+            phi2_val[i] = data_phi2[i];
+
+        tfel::math::st2tost2<3u, double> dphi2_dx;
+        auto data_dx = dphi2_dx_tf.get_data<double>();
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                dphi2_dx(i, j) = data_dx[i * 6 + j];
+
+        tfel::math::st2tost2<3u, double> dphi2_dy;
+        auto data_dy = dphi2_dy_tf.get_data<double>();
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                dphi2_dy(i, j) = data_dy[i * 6 + j];
+
+        return {phi2_val, dphi2_dx, dphi2_dy};
+    }
+
+private:
+    cppflow::model model;
+};
+
+// -----------------------------------------------------------------
+// Singleton : chargé UNE seule fois
+// -----------------------------------------------------------------
+inline NN& getNN()
+{
+  static NN nn("../../model/new_model");
+  return nn;
+}
+
+// -----------------------------------------------------
+// Fonction pour convertir stensor <-> std::vector
+// -----------------------------------------------------
+inline std::vector<double> tensorToArray(const tfel::math::stensor<3u,double>& s) {
+    return std::vector<double>(s.begin(), s.end());
+}
+
+inline tfel::math::stensor<3u,double> arrayToTensor(const std::vector<double>& arr) {
+    tfel::math::stensor<3u,double> s;
+    for (size_t i=0;i<6;i++) s[i] = arr[i];
+    return s;
+}
+
+// -----------------------------------------------------
+// Fonction compute_phi1_dx
+// -----------------------------------------------------
+template <unsigned short N>
+tfel::math::st2tost2<N,double> compute_phi1_dx(
+    const tfel::math::stensor<N,double>& eps,
+    const tfel::math::stensor<N,double>& alpha)
+{
+    using namespace tfel::math;
+    using Stensor = stensor<N,double>;
+    using Stensor4 = st2tost2<N,double>;
+
+    // Lambda qui capture le singleton et alpha
+    auto phi1_func = [&alpha](const Stensor& eps_tensor) -> Stensor {
+        auto& nn = getNN();
+        return std::get<0>(nn.phi1_and_derivatives(eps_tensor, alpha));
+    };
+
+    // Calcul numérique du Jacobien
+    Stensor4 phi1_dx_numeric = computeNumericalDerivative(phi1_func, eps, 1e-6);
+
+    return phi1_dx_numeric;
+}
+
+template <unsigned short N>
+tfel::math::st2tost2<N,double> compute_phi1_dy(
+    const tfel::math::stensor<N,double>& eps,
+    const tfel::math::stensor<N,double>& alpha)
+{
+    using namespace tfel::math;
+    using Stensor = stensor<N,double>;
+    using Stensor4 = st2tost2<N,double>;
+
+    // Lambda qui capture le singleton et alpha
+    auto phi1_func = [&eps](const Stensor& alpha_tensor) -> Stensor {
+        auto& nn = getNN();
+        return std::get<0>(nn.phi1_and_derivatives(eps, alpha_tensor));
+    };
+
+    // Calcul numérique du Jacobien
+    Stensor4 phi1_dy_numeric = computeNumericalDerivative(phi1_func, alpha, 1e-6);
+
+    return phi1_dy_numeric;
+}
+
+template <unsigned short N>
+tfel::math::st2tost2<N,double> compute_phi2_dx(
+    const tfel::math::stensor<N,double>& eps,
+    const tfel::math::stensor<N,double>& alpha)
+{
+    using namespace tfel::math;
+    using Stensor = stensor<N,double>;
+    using Stensor4 = st2tost2<N,double>;
+
+    // Lambda qui capture le singleton et alpha
+    auto phi2_func = [&alpha](const Stensor& eps_tensor) -> Stensor {
+        auto& nn = getNN();
+        return std::get<0>(nn.phi2_and_derivatives(eps_tensor, alpha));
+    };
+
+    // Calcul numérique du Jacobien
+    Stensor4 phi2_dx_numeric = computeNumericalDerivative(phi2_func, eps, 1e-6);
+
+    return phi2_dx_numeric;
+}
+
+template <unsigned short N>
+tfel::math::st2tost2<N,double> compute_phi2_dy(
+    const tfel::math::stensor<N,double>& eps,
+    const tfel::math::stensor<N,double>& alpha)
+{
+    using namespace tfel::math;
+    using Stensor = stensor<N,double>;
+    using Stensor4 = st2tost2<N,double>;
+
+    // Lambda qui capture le singleton et alpha
+    auto phi2_func = [&eps](const Stensor& alpha_tensor) -> Stensor {
+        auto& nn = getNN();
+        return std::get<0>(nn.phi2_and_derivatives(eps, alpha_tensor));
+    };
+
+    // Calcul numérique du Jacobien
+    Stensor4 phi2_dy_numeric = computeNumericalDerivative(phi2_func, alpha, 1e-6);
+
+    return phi2_dy_numeric;
+}
+
+#endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+
+@Integrator {
+    auto& nn = getNN();
+    auto phi2_result = nn.phi2_and_derivatives(
+        eto + theta * deto,
+        alpha + theta * dalpha
+    );
+    falpha -= dt * std::get<0>(phi2_result);
+    dfalpha_ddalpha -= theta * dt * std::get<2>(phi2_result);
+}
+
+@ComputeFinalStress{
+  auto &nn = getNN();
+  auto result = nn.phi1_and_derivatives(
+        eto + deto, alpha
+    );
+  sig = std::get<0>(result);
+}
+
+@TangentOperator {
+auto &nn = getNN();
+auto phi1_result = nn.phi1_and_derivatives(eto + deto, alpha);
+auto phi2_result = nn.phi2_and_derivatives(eto + theta * deto, alpha - (1 - theta) * dalpha);
+dfalpha_ddeto = -theta * dt * std::get<1>(phi2_result);
+auto ddalpha_ddeto = Stensor4{};
+getIntegrationVariablesDerivatives_eto(ddalpha_ddeto);
+//
+// auto phi1_dx_numeric = compute_phi1_dx<3>(eto + deto, alpha);
+// std::cout << "numeric : " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout << phi1_dx_numeric(i,j) << " ";
+//         std::cout << "\n";
+//     }
+// auto phi1_dx = std::get<1>(phi1_result);
+// std::cout << "nn : " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout << phi1_dx(i,j) << " ";
+//         std::cout << "\n";
+//     }
+
+// auto phi1_dy_numeric = compute_phi1_dy<3>(eto + deto, alpha);
+// std::cout << "numeric phi1_dy: " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout <<  phi1_dy_numeric(i,j) << " ";
+//         std::cout << "\n";
+//     }
+// auto phi1_dy = std::get<2>(phi1_result);
+// std::cout << "nn phi1_dy: " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout << phi1_dy(i,j) << " ";
+//         std::cout << "\n";
+//     }
+
+// auto phi2_dx_numeric = compute_phi2_dx<3>(eto + theta * deto, alpha - (1 - theta) * dalpha);
+// std::cout << "numeric phi2_dx : " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout << phi2_dx_numeric(i,j) << " ";
+//         std::cout << "\n";
+//     }
+// auto phi2_dx = std::get<1>(phi2_result);
+// std::cout << "nn phi2_dx: " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout << phi2_dx(i,j) << " ";
+//         std::cout << "\n";
+//     }
+
+// auto phi2_dy_numeric = compute_phi2_dy<3>(eto + deto, alpha);
+// std::cout << "numeric phi2_dy: " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout <<  phi2_dy_numeric(i,j) << " ";
+//         std::cout << "\n";
+//     }
+// auto phi2_dy = std::get<2>(phi2_result);
+// std::cout << "nn phi2_dy: " << std::endl;
+// for (size_t i=0;i<6;i++) {
+//         for (size_t j=0;j<6;j++) std::cout << phi2_dy(i,j) << " ";
+//         std::cout << "\n";
+//     }
+
+Dt = 2 * std::get<1>(phi1_result) + std::get<2>(phi1_result) * ddalpha_ddeto;
+}
+
+
+
+// @TangentOperator{
+//   auto &nn = getNN();
+//   auto phi1_result = nn.phi1_and_derivatives(
+//                 eto+deto,
+//                 alpha
+//         );
+//     auto phi2_result = nn.phi2_and_derivatives(
+//     eto + theta*deto,
+//     alpha + theta*dalpha
+// );
+    
+//   dfalpha_ddeto = -theta * dt * std::get<1>(phi2_result);
+//   auto ddalpha_ddeto = Stensor4{};
+//   getIntegrationVariablesDerivatives_eto(ddalpha_ddeto);
+//   //
+//   Dt = std::get<1>(phi1_result) + std::get<2>(phi1_result) * ddalpha_ddeto;
+// }

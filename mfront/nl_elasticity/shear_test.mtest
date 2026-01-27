@@ -4,6 +4,8 @@
 "test nl elasticity"
 };
 
+@CompareToNumericalTangentOperator true;
+@NumericalTangentOperatorPerturbationValue 1.e-8;
 
 @Behaviour<generic> './src/libBehaviour.so' 'NeuralElasticity';  // 'RambergOsgoodNonLinearElasticity' or 'NeuralElasticity'
 

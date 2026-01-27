@@ -1,0 +1,31 @@
+@DSL Implicit II;
+
+@Epsilon 1e-8;
+@StateVariable StrainStensor alpha[3];
+
+@Includes{
+ NN& getNN(){
+   static NN nn(...);
+   return nn;
+ }
+}
+
+@Integrator{
+  const auto &nn = getNN();
+  falpha -= dt * phi2(eto + theta * deto, alpha + theta * dalpha);
+  dfalpha -= theta * dt * dphi2_dy(...);
+}
+
+@ComputeFinalStress{
+  const auto &nn = getNN();
+  sig = phi1(eto + deto, alpha);
+}
+
+@TangentOperator{
+  const auto &nn = getNN();
+  dfalpha_ddeto = -theta * dt * dphi2_dx;
+  auto ddalpha_ddeto = Stensor4{};
+  getIntegrationVariablesDerivatives_eto(ddalpha_ddeto);
+  //
+  Dt = dph1_dx + dph1_dy * ddalpha_ddeto;
+}

@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
-
+import numpy as np
 
 HERE = Path(__file__).resolve().parent
 file_nn = HERE / "relax_nn.res"

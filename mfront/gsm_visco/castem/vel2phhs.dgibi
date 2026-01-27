@@ -1,0 +1,404 @@
+*
+* \file   vel2ph_hs.mfront
+* \brief  example of how to use the vel2phhs behaviour law
+* in the Cast3M finite element solver
+* \author RM
+* \date   13122024
+*
+
+** AxisymmetricalGeneralisedPlaneStrain example
+** 'OPTION' 'DIMENSION' 1 'MODELISER' 'UNID' 'AXIS' 'AXGZ' ;
+
+** List of material properties:
+**
+** - YoungModulus: 'YOUN'
+** - PoissonRatio: 'NU'
+** - MassDensity: 'RHO'
+** - ThermalExpansion: 'ALPH'
+** - InclusionsVolumeFraction: 'FVAM'
+** - MatrixViscousShear: 'ECIM'
+** - InclusionsViscousShear: 'ECIH'
+ coel = 'MOTS' 'YOUN' 'NU' 'RHO' 'ALPH' 'FVAM' 'ECIM' 'ECIH';
+
+** List of state variables:
+**
+** - ElasticStrain: 'EERR' 'EEZZ' 'EETT'
+** - var_beta: 'BERR' 'BEZZ' 'BETT'
+** - var_alpha: 'A0RR' 'A0ZZ' 'A0TT'
+var_alpha: 'A1RR' 'A1ZZ' 'A1TT'
+var_alpha: 'A2RR' 'A2ZZ' 'A2TT'
+** - var_alpham: 'ALPH'
+** - eps0_macr: 'EPRR' 'EPZZ' 'EPTT'
+** - var_sigm: 'SIG0'
+var_sigm: 'SIG1'
+** - var_sigd: 'S0RR' 'S0ZZ' 'S0TT'
+var_sigd: 'S1RR' 'S1ZZ' 'S1TT'
+** - var_shat1: 'SHAT'
+** - vp_strain: 'EVRR' 'EVZZ' 'EVTT'
+** - var_eelm: 'EEL0'
+var_eelm: 'EEL1'
+** - var_eeld: 'E0RR' 'E0ZZ' 'E0TT'
+var_eeld: 'E1RR' 'E1ZZ' 'E1TT'
+** - var_eps: 'E0RR' 'E0ZZ' 'E0TT'
+var_eps: 'E1RR' 'E1ZZ' 'E1TT'
+** - var_gamma: 'GAMM'
+** - var_xi: 'X0RR' 'X0ZZ' 'X0TT'
+var_xi: 'X1RR' 'X1ZZ' 'X1TT'
+** - tilde_w_prev: 'TILD'
+** - tilde_w: 'TILD'
+** - tilde_d: 'TILD'
+ statev = 'MOTS' 'EERR' 'EEZZ' 'EETT' 'BERR' 'BEZZ' 'BETT' 'A0RR'
+'A0ZZ' 'A0TT' 'A1RR' 'A1ZZ' 'A1TT' 'A2RR' 'A2ZZ' 'A2TT' 'ALPH' 'EPRR'
+'EPZZ' 'EPTT' 'SIG0' 'SIG1' 'S0RR' 'S0ZZ' 'S0TT' 'S1RR' 'S1ZZ' 'S1TT'
+'SHAT' 'EVRR' 'EVZZ' 'EVTT' 'EEL0' 'EEL1' 'E0RR' 'E0ZZ' 'E0TT' 'E1RR'
+'E1ZZ' 'E1TT' 'E0RR' 'E0ZZ' 'E0TT' 'E1RR' 'E1ZZ' 'E1TT' 'GAMM' 'X0RR'
+'X0ZZ' 'X0TT' 'X1RR' 'X1ZZ' 'X1TT' 'TILD' 'TILD' 'TILD';
+
+** List of external state variables:
+**
+** - Temperature: 'T'
+** - MatrixSwelling: 'FSSM'
+** - ClusterSwelling: 'FSSH'
+ params = 'MOTS' 'T' 'FSSM' 'FSSH';
+
+ MO = 'MODELISER' v 'MECANIQUE' 'ELASTIQUE' 'NON_LINEAIRE'
+'UTILISATEUR' 'LIB_LOI' 'libUmatBehaviour.so' 'FCT_LOI' 'umatvel2phhs'
+'C_MATERIAU' coel 'C_VARINTER' statev 'PARA_LOI' params 'CONS' M;
+
+ MA = 'MATERIAU' MO 'YOUN' xyoun 'NU' xnu 'RHO' xrho 'ALPH' xalph
+'FVAM' xfvamas 'ECIM' xecim 'ECIH' xecih;
+
+** Axisymmetrical example
+** 'OPTION' 'DIMENSION' 2 'MODELISER' 'AXIS' ;
+
+** List of material properties:
+**
+** - YoungModulus: 'YOUN'
+** - PoissonRatio: 'NU'
+** - MassDensity: 'RHO'
+** - ThermalExpansion: 'ALPH'
+** - InclusionsVolumeFraction: 'FVAM'
+** - MatrixViscousShear: 'ECIM'
+** - InclusionsViscousShear: 'ECIH'
+ coel = 'MOTS' 'YOUN' 'NU' 'RHO' 'ALPH' 'FVAM' 'ECIM' 'ECIH';
+
+** List of state variables:
+**
+** - ElasticStrain: 'EERR' 'EEZZ' 'EETT' 'EERZ'
+** - var_beta: 'BERR' 'BEZZ' 'BETT' 'BERZ'
+** - var_alpha: 'A0RR' 'A0ZZ' 'A0TT' 'A0RZ'
+var_alpha: 'A1RR' 'A1ZZ' 'A1TT' 'A1RZ'
+var_alpha: 'A2RR' 'A2ZZ' 'A2TT' 'A2RZ'
+** - var_alpham: 'ALPH'
+** - eps0_macr: 'EPRR' 'EPZZ' 'EPTT' 'EPRZ'
+** - var_sigm: 'SIG0'
+var_sigm: 'SIG1'
+** - var_sigd: 'S0RR' 'S0ZZ' 'S0TT' 'S0RZ'
+var_sigd: 'S1RR' 'S1ZZ' 'S1TT' 'S1RZ'
+** - var_shat1: 'SHAT'
+** - vp_strain: 'EVRR' 'EVZZ' 'EVTT' 'EVRZ'
+** - var_eelm: 'EEL0'
+var_eelm: 'EEL1'
+** - var_eeld: 'E0RR' 'E0ZZ' 'E0TT' 'E0RZ'
+var_eeld: 'E1RR' 'E1ZZ' 'E1TT' 'E1RZ'
+** - var_eps: 'E0RR' 'E0ZZ' 'E0TT' 'E0RZ'
+var_eps: 'E1RR' 'E1ZZ' 'E1TT' 'E1RZ'
+** - var_gamma: 'GAMM'
+** - var_xi: 'X0RR' 'X0ZZ' 'X0TT' 'X0RZ'
+var_xi: 'X1RR' 'X1ZZ' 'X1TT' 'X1RZ'
+** - tilde_w_prev: 'TILD'
+** - tilde_w: 'TILD'
+** - tilde_d: 'TILD'
+ statev = 'MOTS' 'EERR' 'EEZZ' 'EETT' 'EERZ' 'BERR' 'BEZZ' 'BETT'
+'BERZ' 'A0RR' 'A0ZZ' 'A0TT' 'A0RZ' 'A1RR' 'A1ZZ' 'A1TT' 'A1RZ' 'A2RR'
+'A2ZZ' 'A2TT' 'A2RZ' 'ALPH' 'EPRR' 'EPZZ' 'EPTT' 'EPRZ' 'SIG0' 'SIG1'
+'S0RR' 'S0ZZ' 'S0TT' 'S0RZ' 'S1RR' 'S1ZZ' 'S1TT' 'S1RZ' 'SHAT' 'EVRR'
+'EVZZ' 'EVTT' 'EVRZ' 'EEL0' 'EEL1' 'E0RR' 'E0ZZ' 'E0TT' 'E0RZ' 'E1RR'
+'E1ZZ' 'E1TT' 'E1RZ' 'E0RR' 'E0ZZ' 'E0TT' 'E0RZ' 'E1RR' 'E1ZZ' 'E1TT'
+'E1RZ' 'GAMM' 'X0RR' 'X0ZZ' 'X0TT' 'X0RZ' 'X1RR' 'X1ZZ' 'X1TT' 'X1RZ'
+'TILD' 'TILD' 'TILD';
+
+** List of external state variables:
+**
+** - Temperature: 'T'
+** - MatrixSwelling: 'FSSM'
+** - ClusterSwelling: 'FSSH'
+ params = 'MOTS' 'T' 'FSSM' 'FSSH';
+
+ MO = 'MODELISER' v 'MECANIQUE' 'ELASTIQUE' 'NON_LINEAIRE'
+'UTILISATEUR' 'LIB_LOI' 'libUmatBehaviour.so' 'FCT_LOI' 'umatvel2phhs'
+'C_MATERIAU' coel 'C_VARINTER' statev 'PARA_LOI' params 'CONS' M;
+
+ MA = 'MATERIAU' MO 'YOUN' xyoun 'NU' xnu 'RHO' xrho 'ALPH' xalph
+'FVAM' xfvamas 'ECIM' xecim 'ECIH' xecih;
+
+** PlaneStrain example
+** 'OPTION' 'DIMENSION' 2 'MODELISER' 'PLAN' 'DEFO' ;
+
+** List of material properties:
+**
+** - YoungModulus: 'YOUN'
+** - PoissonRatio: 'NU'
+** - MassDensity: 'RHO'
+** - ThermalExpansion: 'ALPH'
+** - InclusionsVolumeFraction: 'FVAM'
+** - MatrixViscousShear: 'ECIM'
+** - InclusionsViscousShear: 'ECIH'
+ coel = 'MOTS' 'YOUN' 'NU' 'RHO' 'ALPH' 'FVAM' 'ECIM' 'ECIH';
+
+** List of state variables:
+**
+** - ElasticStrain: 'EEXX' 'EEYY' 'EEZZ' 'EEXY'
+** - var_beta: 'BEXX' 'BEYY' 'BEZZ' 'BEXY'
+** - var_alpha: 'A0XX' 'A0YY' 'A0ZZ' 'A0XY'
+var_alpha: 'A1XX' 'A1YY' 'A1ZZ' 'A1XY'
+var_alpha: 'A2XX' 'A2YY' 'A2ZZ' 'A2XY'
+** - var_alpham: 'ALPH'
+** - eps0_macr: 'EPXX' 'EPYY' 'EPZZ' 'EPXY'
+** - var_sigm: 'SIG0'
+var_sigm: 'SIG1'
+** - var_sigd: 'S0XX' 'S0YY' 'S0ZZ' 'S0XY'
+var_sigd: 'S1XX' 'S1YY' 'S1ZZ' 'S1XY'
+** - var_shat1: 'SHAT'
+** - vp_strain: 'EVXX' 'EVYY' 'EVZZ' 'EVXY'
+** - var_eelm: 'EEL0'
+var_eelm: 'EEL1'
+** - var_eeld: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY'
+var_eeld: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY'
+** - var_eps: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY'
+var_eps: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY'
+** - var_gamma: 'GAMM'
+** - var_xi: 'X0XX' 'X0YY' 'X0ZZ' 'X0XY'
+var_xi: 'X1XX' 'X1YY' 'X1ZZ' 'X1XY'
+** - tilde_w_prev: 'TILD'
+** - tilde_w: 'TILD'
+** - tilde_d: 'TILD'
+ statev = 'MOTS' 'EEXX' 'EEYY' 'EEZZ' 'EEXY' 'BEXX' 'BEYY' 'BEZZ'
+'BEXY' 'A0XX' 'A0YY' 'A0ZZ' 'A0XY' 'A1XX' 'A1YY' 'A1ZZ' 'A1XY' 'A2XX'
+'A2YY' 'A2ZZ' 'A2XY' 'ALPH' 'EPXX' 'EPYY' 'EPZZ' 'EPXY' 'SIG0' 'SIG1'
+'S0XX' 'S0YY' 'S0ZZ' 'S0XY' 'S1XX' 'S1YY' 'S1ZZ' 'S1XY' 'SHAT' 'EVXX'
+'EVYY' 'EVZZ' 'EVXY' 'EEL0' 'EEL1' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E1XX'
+'E1YY' 'E1ZZ' 'E1XY' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E1XX' 'E1YY' 'E1ZZ'
+'E1XY' 'GAMM' 'X0XX' 'X0YY' 'X0ZZ' 'X0XY' 'X1XX' 'X1YY' 'X1ZZ' 'X1XY'
+'TILD' 'TILD' 'TILD';
+
+** List of external state variables:
+**
+** - Temperature: 'T'
+** - MatrixSwelling: 'FSSM'
+** - ClusterSwelling: 'FSSH'
+ params = 'MOTS' 'T' 'FSSM' 'FSSH';
+
+ MO = 'MODELISER' v 'MECANIQUE' 'ELASTIQUE' 'NON_LINEAIRE'
+'UTILISATEUR' 'LIB_LOI' 'libUmatBehaviour.so' 'FCT_LOI' 'umatvel2phhs'
+'C_MATERIAU' coel 'C_VARINTER' statev 'PARA_LOI' params 'CONS' M;
+
+ MA = 'MATERIAU' MO 'YOUN' xyoun 'NU' xnu 'RHO' xrho 'ALPH' xalph
+'FVAM' xfvamas 'ECIM' xecim 'ECIH' xecih;
+
+** GeneralisedPlaneStrain example
+** 'OPTION' 'DIMENSION' 2 'MODELISER' 'PLAN' 'GENE' ;
+
+** List of material properties:
+**
+** - YoungModulus: 'YOUN'
+** - PoissonRatio: 'NU'
+** - MassDensity: 'RHO'
+** - ThermalExpansion: 'ALPH'
+** - InclusionsVolumeFraction: 'FVAM'
+** - MatrixViscousShear: 'ECIM'
+** - InclusionsViscousShear: 'ECIH'
+ coel = 'MOTS' 'YOUN' 'NU' 'RHO' 'ALPH' 'FVAM' 'ECIM' 'ECIH';
+
+** List of state variables:
+**
+** - ElasticStrain: 'EEXX' 'EEYY' 'EEZZ' 'EEXY'
+** - var_beta: 'BEXX' 'BEYY' 'BEZZ' 'BEXY'
+** - var_alpha: 'A0XX' 'A0YY' 'A0ZZ' 'A0XY'
+var_alpha: 'A1XX' 'A1YY' 'A1ZZ' 'A1XY'
+var_alpha: 'A2XX' 'A2YY' 'A2ZZ' 'A2XY'
+** - var_alpham: 'ALPH'
+** - eps0_macr: 'EPXX' 'EPYY' 'EPZZ' 'EPXY'
+** - var_sigm: 'SIG0'
+var_sigm: 'SIG1'
+** - var_sigd: 'S0XX' 'S0YY' 'S0ZZ' 'S0XY'
+var_sigd: 'S1XX' 'S1YY' 'S1ZZ' 'S1XY'
+** - var_shat1: 'SHAT'
+** - vp_strain: 'EVXX' 'EVYY' 'EVZZ' 'EVXY'
+** - var_eelm: 'EEL0'
+var_eelm: 'EEL1'
+** - var_eeld: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY'
+var_eeld: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY'
+** - var_eps: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY'
+var_eps: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY'
+** - var_gamma: 'GAMM'
+** - var_xi: 'X0XX' 'X0YY' 'X0ZZ' 'X0XY'
+var_xi: 'X1XX' 'X1YY' 'X1ZZ' 'X1XY'
+** - tilde_w_prev: 'TILD'
+** - tilde_w: 'TILD'
+** - tilde_d: 'TILD'
+ statev = 'MOTS' 'EEXX' 'EEYY' 'EEZZ' 'EEXY' 'BEXX' 'BEYY' 'BEZZ'
+'BEXY' 'A0XX' 'A0YY' 'A0ZZ' 'A0XY' 'A1XX' 'A1YY' 'A1ZZ' 'A1XY' 'A2XX'
+'A2YY' 'A2ZZ' 'A2XY' 'ALPH' 'EPXX' 'EPYY' 'EPZZ' 'EPXY' 'SIG0' 'SIG1'
+'S0XX' 'S0YY' 'S0ZZ' 'S0XY' 'S1XX' 'S1YY' 'S1ZZ' 'S1XY' 'SHAT' 'EVXX'
+'EVYY' 'EVZZ' 'EVXY' 'EEL0' 'EEL1' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E1XX'
+'E1YY' 'E1ZZ' 'E1XY' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E1XX' 'E1YY' 'E1ZZ'
+'E1XY' 'GAMM' 'X0XX' 'X0YY' 'X0ZZ' 'X0XY' 'X1XX' 'X1YY' 'X1ZZ' 'X1XY'
+'TILD' 'TILD' 'TILD';
+
+** List of external state variables:
+**
+** - Temperature: 'T'
+** - MatrixSwelling: 'FSSM'
+** - ClusterSwelling: 'FSSH'
+ params = 'MOTS' 'T' 'FSSM' 'FSSH';
+
+ MO = 'MODELISER' v 'MECANIQUE' 'ELASTIQUE' 'NON_LINEAIRE'
+'UTILISATEUR' 'LIB_LOI' 'libUmatBehaviour.so' 'FCT_LOI' 'umatvel2phhs'
+'C_MATERIAU' coel 'C_VARINTER' statev 'PARA_LOI' params 'CONS' M;
+
+ MA = 'MATERIAU' MO 'YOUN' xyoun 'NU' xnu 'RHO' xrho 'ALPH' xalph
+'FVAM' xfvamas 'ECIM' xecim 'ECIH' xecih;
+
+** Tridimensional example
+** 'OPTION' 'DIMENSION' 3 'MODELISER' 'TRID' ;
+
+** List of material properties:
+**
+** - YoungModulus: 'YOUN'
+** - PoissonRatio: 'NU'
+** - MassDensity: 'RHO'
+** - ThermalExpansion: 'ALPH'
+** - InclusionsVolumeFraction: 'FVAM'
+** - MatrixViscousShear: 'ECIM'
+** - InclusionsViscousShear: 'ECIH'
+ coel = 'MOTS' 'YOUN' 'NU' 'RHO' 'ALPH' 'FVAM' 'ECIM' 'ECIH';
+
+** List of state variables:
+**
+** - ElasticStrain: 'EEXX' 'EEYY' 'EEZZ' 'EEXY' 'EEXZ' 'EEYZ'
+** - var_beta: 'BEXX' 'BEYY' 'BEZZ' 'BEXY' 'BEXZ' 'BEYZ'
+** - var_alpha: 'A0XX' 'A0YY' 'A0ZZ' 'A0XY' 'A0XZ' 'A0YZ'
+var_alpha: 'A1XX' 'A1YY' 'A1ZZ' 'A1XY' 'A1XZ' 'A1YZ'
+var_alpha: 'A2XX' 'A2YY' 'A2ZZ' 'A2XY' 'A2XZ' 'A2YZ'
+** - var_alpham: 'ALPH'
+** - eps0_macr: 'EPXX' 'EPYY' 'EPZZ' 'EPXY' 'EPXZ' 'EPYZ'
+** - var_sigm: 'SIG0'
+var_sigm: 'SIG1'
+** - var_sigd: 'S0XX' 'S0YY' 'S0ZZ' 'S0XY' 'S0XZ' 'S0YZ'
+var_sigd: 'S1XX' 'S1YY' 'S1ZZ' 'S1XY' 'S1XZ' 'S1YZ'
+** - var_shat1: 'SHAT'
+** - vp_strain: 'EVXX' 'EVYY' 'EVZZ' 'EVXY' 'EVXZ' 'EVYZ'
+** - var_eelm: 'EEL0'
+var_eelm: 'EEL1'
+** - var_eeld: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E0XZ' 'E0YZ'
+var_eeld: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY' 'E1XZ' 'E1YZ'
+** - var_eps: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E0XZ' 'E0YZ'
+var_eps: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY' 'E1XZ' 'E1YZ'
+** - var_gamma: 'GAMM'
+** - var_xi: 'X0XX' 'X0YY' 'X0ZZ' 'X0XY' 'X0XZ' 'X0YZ'
+var_xi: 'X1XX' 'X1YY' 'X1ZZ' 'X1XY' 'X1XZ' 'X1YZ'
+** - tilde_w_prev: 'TILD'
+** - tilde_w: 'TILD'
+** - tilde_d: 'TILD'
+ statev = 'MOTS' 'EEXX' 'EEYY' 'EEZZ' 'EEXY' 'EEXZ' 'EEYZ' 'BEXX'
+'BEYY' 'BEZZ' 'BEXY' 'BEXZ' 'BEYZ' 'A0XX' 'A0YY' 'A0ZZ' 'A0XY' 'A0XZ'
+'A0YZ' 'A1XX' 'A1YY' 'A1ZZ' 'A1XY' 'A1XZ' 'A1YZ' 'A2XX' 'A2YY' 'A2ZZ'
+'A2XY' 'A2XZ' 'A2YZ' 'ALPH' 'EPXX' 'EPYY' 'EPZZ' 'EPXY' 'EPXZ' 'EPYZ'
+'SIG0' 'SIG1' 'S0XX' 'S0YY' 'S0ZZ' 'S0XY' 'S0XZ' 'S0YZ' 'S1XX' 'S1YY'
+'S1ZZ' 'S1XY' 'S1XZ' 'S1YZ' 'SHAT' 'EVXX' 'EVYY' 'EVZZ' 'EVXY' 'EVXZ'
+'EVYZ' 'EEL0' 'EEL1' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E0XZ' 'E0YZ' 'E1XX'
+'E1YY' 'E1ZZ' 'E1XY' 'E1XZ' 'E1YZ' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E0XZ'
+'E0YZ' 'E1XX' 'E1YY' 'E1ZZ' 'E1XY' 'E1XZ' 'E1YZ' 'GAMM' 'X0XX' 'X0YY'
+'X0ZZ' 'X0XY' 'X0XZ' 'X0YZ' 'X1XX' 'X1YY' 'X1ZZ' 'X1XY' 'X1XZ' 'X1YZ'
+'TILD' 'TILD' 'TILD';
+
+** List of external state variables:
+**
+** - Temperature: 'T'
+** - MatrixSwelling: 'FSSM'
+** - ClusterSwelling: 'FSSH'
+ params = 'MOTS' 'T' 'FSSM' 'FSSH';
+
+ MO = 'MODELISER' v 'MECANIQUE' 'ELASTIQUE' 'NON_LINEAIRE'
+'UTILISATEUR' 'LIB_LOI' 'libUmatBehaviour.so' 'FCT_LOI' 'umatvel2phhs'
+'C_MATERIAU' coel 'C_VARINTER' statev 'PARA_LOI' params 'CONS' M;
+
+ MA = 'MATERIAU' MO 'YOUN' xyoun 'NU' xnu 'RHO' xrho 'ALPH' xalph
+'FVAM' xfvamas 'ECIM' xecim 'ECIH' xecih;
+
+* The behaviour does not support the plane stress hypothesis
+* natively.
+* Support for the plane stress hypothesis
+* is added through the generic plane stress handler
+* provided by the Cast3M interface. This requires some tricky
+* manipulations of the material properties and can be quite
+* inefficient. Use it with care and consider adding proper
+* plane stress support to your behaviour.
+*
+** PlaneStress example
+** 'OPTION' 'DIMENSION' 2 'MODELISER' 'PLAN' 'CONT' ;
+
+** List of material properties:
+**
+** - YoungModulus: 'YOUN'
+** - PoissonRatio: 'NU'
+** - MassDensity: 'RHO'
+** - ThermalExpansion: 'ALPH'
+** - PlateWidth: 'DIM3'
+** - InclusionsVolumeFraction: 'FVAM'
+** - MatrixViscousShear: 'ECIM'
+** - InclusionsViscousShear: 'ECIH'
+ coel = 'MOTS' 'YOUN' 'NU' 'RHO' 'ALPH' 'DIM3' 'FVAM' 'ECIM' 'ECIH';
+
+** List of state variables:
+**
+** - ElasticStrain: 'EEXX' 'EEYY' 'EEZZ' 'EEXY'
+** - var_beta: 'BEXX' 'BEYY' 'BEZZ' 'BEXY'
+** - var_alpha: 'A0XX' 'A0YY' 'A0ZZ' 'A0XY'
+var_alpha: 'A1XX' 'A1YY' 'A1ZZ' 'A1XY'
+var_alpha: 'A2XX' 'A2YY' 'A2ZZ' 'A2XY'
+** - var_alpham: 'ALPH'
+** - eps0_macr: 'EPXX' 'EPYY' 'EPZZ' 'EPXY'
+** - var_sigm: 'SIG0'
+var_sigm: 'SIG1'
+** - var_sigd: 'S0XX' 'S0YY' 'S0ZZ' 'S0XY'
+var_sigd: 'S1XX' 'S1YY' 'S1ZZ' 'S1XY'
+** - var_shat1: 'SHAT'
+** - vp_strain: 'EVXX' 'EVYY' 'EVZZ' 'EVXY'
+** - var_eelm: 'EEL0'
+var_eelm: 'EEL1'
+** - var_eeld: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY'
+var_eeld: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY'
+** - var_eps: 'E0XX' 'E0YY' 'E0ZZ' 'E0XY'
+var_eps: 'E1XX' 'E1YY' 'E1ZZ' 'E1XY'
+** - var_gamma: 'GAMM'
+** - var_xi: 'X0XX' 'X0YY' 'X0ZZ' 'X0XY'
+var_xi: 'X1XX' 'X1YY' 'X1ZZ' 'X1XY'
+** - tilde_w_prev: 'TILD'
+** - tilde_w: 'TILD'
+** - tilde_d: 'TILD'
+** - AxialStrain: 'ETOZ'
+ statev = 'MOTS' 'EEXX' 'EEYY' 'EEZZ' 'EEXY' 'BEXX' 'BEYY' 'BEZZ'
+'BEXY' 'A0XX' 'A0YY' 'A0ZZ' 'A0XY' 'A1XX' 'A1YY' 'A1ZZ' 'A1XY' 'A2XX'
+'A2YY' 'A2ZZ' 'A2XY' 'ALPH' 'EPXX' 'EPYY' 'EPZZ' 'EPXY' 'SIG0' 'SIG1'
+'S0XX' 'S0YY' 'S0ZZ' 'S0XY' 'S1XX' 'S1YY' 'S1ZZ' 'S1XY' 'SHAT' 'EVXX'
+'EVYY' 'EVZZ' 'EVXY' 'EEL0' 'EEL1' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E1XX'
+'E1YY' 'E1ZZ' 'E1XY' 'E0XX' 'E0YY' 'E0ZZ' 'E0XY' 'E1XX' 'E1YY' 'E1ZZ'
+'E1XY' 'GAMM' 'X0XX' 'X0YY' 'X0ZZ' 'X0XY' 'X1XX' 'X1YY' 'X1ZZ' 'X1XY'
+'TILD' 'TILD' 'TILD' 'ETOZ';
+
+** List of external state variables:
+**
+** - Temperature: 'T'
+** - MatrixSwelling: 'FSSM'
+** - ClusterSwelling: 'FSSH'
+ params = 'MOTS' 'T' 'FSSM' 'FSSH';
+
+ MO = 'MODELISER' v 'MECANIQUE' 'ELASTIQUE' 'NON_LINEAIRE'
+'UTILISATEUR' 'LIB_LOI' 'libUmatBehaviour.so' 'FCT_LOI' 'umatvel2phhs'
+'C_MATERIAU' coel 'C_VARINTER' statev 'PARA_LOI' params 'CONS' M;
+
+ MA = 'MATERIAU' MO 'YOUN' xyoun 'NU' xnu 'RHO' xrho 'ALPH' xalph
+'DIM3' xdim3 'FVAM' xfvamas 'ECIM' xecim 'ECIH' xecih;
+

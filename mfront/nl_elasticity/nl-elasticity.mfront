@@ -90,7 +90,7 @@ private:
 
 @Integrator {
     // Instantiate the neural network (static to load only once)
-    static NN nn("../nl_model");
+    static NN nn("../../model/nl_model");
     
     // Compute the stress and tangent operator for the current strain
     sig = nn.stress(eto + deto);

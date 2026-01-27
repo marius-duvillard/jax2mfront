@@ -6,16 +6,23 @@
 };
 
 // Loading
-@Real 'tcharge' 0.0001;
+
 //* The constitutive law
 @Behaviour<generic> './src/libBehaviour.so' 'NeuralGSM' ;
+
+// @CompareToNumericalJacobian true;
+// @PerturbationValueForNumericalJacobianComputation 1e-8;
+@CompareToNumericalTangentOperator true;
+@NumericalTangentOperatorPerturbationValue 1.e-8;
 
 //* Constant temperature 
 @ExternalStateVariable 'Temperature' 300.0; // Temperature in Kelvin
 //* Mechanical Loading
-@ImposedStrain 'EXY' {0. : 0., 'tcharge' : 0.02, 10.0 : 0.02};
-// @ImposedStress 'SXX' {0. : 0., 'tcharge' : 0., 10.0 : 0.};
-// @ImposedStress 'SYY' {0. : 0., 'tcharge' : 0., 10.0 : 0.};
+// @ImposedStrain 'EXX' {0. : 0., 'tcharge' : 0.02, 10.0 : 0.0};
+@Real 'tcharge' 0.0001;
+@ImposedStrain 'EXX' {0. : 0., 'tcharge' : 0.02, 10.0 : 0.02};
+@ImposedStress 'SZZ' {0. : 0., 'tcharge' : 0., 10.0 : 0.};
+@ImposedStress 'SYY' {0. : 0., 'tcharge' : 0., 10.0 : 0.};
 //* Time discretization
 @Times {0., 'tcharge' in 40, 10.0 in 100};
 //@Test<file> 'vel1.ref' {'SZZ':10} 1e6; 

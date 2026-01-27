@@ -139,13 +139,16 @@ private:
 
 #endif /* LIB_MFRONT_TENSORFLOW */
 }
-@StateVariable StrainStensor alpha[3];
+@AuxiliaryStateVariable StrainStensor alpha[3];
+
 @ProvidesTangentOperator;
 
 @Integrator {
     // Instantiate the neural network (static to load only once)
-    static NN nn("/DISK2/md266594/Workspace/jax2mfront/gsm_model");
-    dalpha = nn.dalpha(eto + deto, alpha) * dt;
-    sig = nn.stress(eto + deto, alpha + dalpha); 
-    Dt = nn.tangentop(eto + deto, alpha + dalpha);
+    static NN nn("../../model/gsm_model");
+    const auto dalpha = nn.dalpha(eto, deto, alpha, dt);
+    alpha += dalpha;
+    sig = nn.stress(eto + deto,alpha);
+    Dt = nn.tangentop(eto + deto,alpha);
+    
 }
