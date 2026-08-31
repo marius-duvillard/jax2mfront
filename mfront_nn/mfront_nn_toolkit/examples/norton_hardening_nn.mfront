@@ -1,0 +1,106 @@
+@DSL Implicit;
+@Behaviour norton_hardening_nn;
+@Author HELFER Thomas;
+@Date 29 / 01 / 2026;
+@Description{
+    "Norton viscoplasticity with isotropic hardening (scalar p)."}
+
+@Profiling true;
+@ModellingHypothesis Tridimensional;
+@Theta 1.0;
+@Epsilon 1e-14;
+@Algorithm NewtonRaphson;
+
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+@Includes
+{
+    #ifndef LIB_MFRONT_TENSORFLOW
+    #define LIB_MFRONT_TENSORFLOW 1
+
+    #include "cppflow/cppflow.h"
+    #include "nn_mfront.hxx"
+    #include <vector>
+
+    struct NN {
+        inline NN(const std::string& model_path)
+            : model(model_path) {}
+
+        inline std::tuple<
+            nmf::Stensor,
+            double,
+            nmf::Stensor4,
+            nmf::Stensor,
+            nmf::Stensor,
+            double>
+        phi2(
+                const nmf::Stensor& sigma,
+                const double& p)
+        {
+            cppflow::tensor sigma_tf(std::vector<double>(sigma.begin(), sigma.end()), {6});
+
+            static std::vector<double> p_buf(1);
+            p_buf[0] = p;
+            cppflow::tensor p_tf(p_buf, {1});
+
+            auto outputs = model({{{"phi2_sigma:0", sigma_tf}, {"phi2_p:0", p_tf}}},
+                                 {{"PartitionedCall:4", "PartitionedCall:5", "PartitionedCall:0", "PartitionedCall:1", "PartitionedCall:2", "PartitionedCall:3"}});
+
+            nmf::Stensor depsp;
+            nmf::tf_to_stensor(outputs[0], depsp);
+
+            double dp = outputs[1].get_data<double>()[0];
+
+            nmf::Stensor4 ddepsp_dsig;
+            nmf::tf_to_st2tost2(outputs[2], ddepsp_dsig);
+
+            nmf::Stensor ddepsp_dp;
+            nmf::tf_to_stensor(outputs[3], ddepsp_dp);
+
+            nmf::Stensor ddp_dsig;
+            nmf::tf_to_stensor(outputs[4], ddp_dsig);
+
+            double ddp_dp = outputs[5].get_data<double>()[0];
+
+            return {depsp, dp, ddepsp_dsig, ddepsp_dp, ddp_dsig, ddp_dp};
+        }
+
+        private:
+            cppflow::model model;
+    };
+
+    inline NN& getNN() {
+        static NN nn("../../model/norton_hardening_nn");
+        return nn;
+    }
+
+    #endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@StateVariable StrainStensor evp;
+evp.setGlossaryName("ViscoplasticStrain");
+@StateVariable strain p;
+p.setEntryName("p");
+@AuxiliaryStateVariable real niter;
+
+@Brick StandardElasticity{
+    young_modulus : 150000000000.0,
+    poisson_ratio : 0.3
+};
+
+@Integrator
+{
+    auto& nn = getNN();
+    feel += devp;
+    dfeel_ddevp = Stensor4::Id();
+    auto [depsp, dp_rate, ddepsp_dsig, ddepsp_dp, ddp_dsig, ddp_dp]
+        = nn.phi2(sig, p + theta * dp);
+    fevp -= dt * depsp;
+    fp   -= dt * dp_rate;
+    const auto De = lambda * Stensor4::IxI() + 2 * mu * Stensor4::Id();
+    dfevp_ddeel -= dt * theta * ddepsp_dsig * De;
+    dfevp_ddp   -= dt * theta * ddepsp_dp;
+    dfp_ddeel   -= dt * theta * (ddp_dsig | De);
+    dfp_ddp     -= dt * theta * ddp_dp;
+    ++niter;
+}

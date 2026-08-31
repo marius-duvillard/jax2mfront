@@ -1,0 +1,77 @@
+@DSL Implicit;
+@Behaviour norton_nn;
+@Author Duvillard Marius;
+@Date 29 / 01 / 2026;
+@Description{
+    "Behaviour based on a TensorFlow neural network for Norton-type viscoplasticity."}
+
+@ModellingHypothesis Tridimensional;
+@Theta 0.5;
+@Epsilon 1e-14;
+@Algorithm NewtonRaphson;
+
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+@Includes
+{
+    #ifndef LIB_MFRONT_TENSORFLOW
+    #define LIB_MFRONT_TENSORFLOW 1
+
+    #include "cppflow/cppflow.h"
+    #include "nn_mfront.hxx"
+    #include <vector>
+
+    struct NN {
+        inline NN(const std::string& model_path)
+            : model(model_path) {}
+
+        inline std::tuple<
+            nmf::Stensor,
+            nmf::Stensor4>
+        phi2(
+                const nmf::Stensor& sigma)
+        {
+            cppflow::tensor sigma_tf(std::vector<double>(sigma.begin(), sigma.end()), {6});
+
+            auto outputs = model({{{"phi2_sigma:0", sigma_tf}}},
+                                 {{"PartitionedCall:1", "PartitionedCall:0"}});
+
+            nmf::Stensor depsp;
+            nmf::tf_to_stensor(outputs[0], depsp);
+
+            nmf::Stensor4 ddepsp_dsig;
+            nmf::tf_to_st2tost2(outputs[1], ddepsp_dsig);
+
+            return {depsp, ddepsp_dsig};
+        }
+
+        private:
+            cppflow::model model;
+    };
+
+    inline NN& getNN() {
+        static NN nn("../../model/norton_nn");
+        return nn;
+    }
+
+    #endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@StateVariable StrainStensor evp;
+evp.setGlossaryName("ViscoplasticStrain");
+
+@Brick StandardElasticity{
+    young_modulus : 150000000000.0,
+    poisson_ratio : 0.3
+};
+
+@Integrator
+{
+    auto& nn = getNN();
+    feel += devp;
+    dfeel_ddevp = Stensor4::Id();
+    auto [depsp, ddepsp_dsig] = nn.phi2(sig);
+    fevp -= dt * depsp;
+    const auto De = lambda * Stensor4::IxI() + 2 * mu * Stensor4::Id();
+    dfevp_ddeel -= dt * theta * ddepsp_dsig * De;
+}

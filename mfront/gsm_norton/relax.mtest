@@ -1,0 +1,28 @@
+@Author Marius Duvillard;
+@Date 12 janvier 2026;
+@Description{
+    "Uniaxial relaxation test"
+    "mtest relax.mtest"};
+
+// Loading
+
+//* The constitutive law
+@Behaviour < generic > './src/libBehaviour.so' 'norton_nn';
+
+// @CompareToNumericalJacobian true;
+// @PerturbationValueForNumericalJacobianComputation 1e-8;
+// @CompareToNumericalTangentOperator true;
+// @NumericalTangentOperatorPerturbationValue 1.e-8;
+
+//* Constant temperature
+@ExternalStateVariable 'Temperature' 300.0; // Temperature in Kelvin
+//* Mechanical Loading
+// @ImposedStrain 'EXX' {0. : 0., 'tcharge' : 0.02, 10.0 : 0.0};
+@Real 'tcharge' 0.05;
+@ImposedStrain 'EXY' {0. : 0., 'tcharge' : 0.005, 10.0 : 0.005};
+// @ImposedStress 'SZZ' {0. : 0., 'tcharge' : 0., 10.0 : 0.};
+// @ImposedStress 'SYY' {0. : 0., 'tcharge' : 0., 10.0 : 0.};
+//* Time discretization
+@Times{0., 'tcharge' in 50, 0.1 in 50};
+//@Test<file> 'vel1.ref' {'SZZ':10} 1e6;
+@UserDefinedPostProcessing 'relax_nn.res' {'EXY', 'SXY'};

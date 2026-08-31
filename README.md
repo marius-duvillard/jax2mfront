@@ -58,15 +58,14 @@ Using the generated data, we define and train our model with the `jaxmat` librar
 First, create a Python environment with the required [dependencies](requirements.txt):
 
 ```bash
-python3 -m venv .venv/jax2mfront
-source .venv/jax2mfront/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
 The notebook [train_convert_nlelastic.ipynb](train_convert_nlelastic.ipynb) explains how to train a model to learn a non-linear elastic law, and how to convert the Equinox/Jax PyTree model class to produce the [nl_model](nl_model) repository containing all the required neural network graphs and weights.
 
 # MFront Law
-
 The MFront law is defined in the [mfront folder](mfront/nl-elasticity.mfront):
 
 ```bash
@@ -83,3 +82,14 @@ You will also find the MFront law that was used to generate the training data.
 # MTest Evaluation
 
 We implemented a simple MTest for material point evaluation.
+
+# Implemented constitutive laws
+
+We implement several material behaviour. The following files illustrate how to trained the `jaxmat` as well as how to integrate it in with MFront : 
+
+- Non linear elastic law (Ramberg-Osgood) : [train_convert_nlelastic.ipynb](train_convert_nlelastic.ipynb) / [nl-elasticity.mfront](mfront/nl-elasticity.mfront)
+- Visco-elasticity with one branch : 
+- Visco-elasticity with several branch : 
+- Visco-plasticity without hardening : 
+- Visco-plasticity with isotropic hardening : 
+- (In progress) Visco-plasticity with kinematic hardening : 

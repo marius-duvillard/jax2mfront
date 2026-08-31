@@ -1,0 +1,74 @@
+@DSL DefaultDSL;
+@Behaviour NeuralElasticity;
+@Author Marius Duvillard;
+@Date 18 / 12 / 2025;
+@Description{
+    "Non-linear elasticity: stress and tangent operator from a single TF model."}
+
+@ModellingHypothesis Tridimensional;
+@ProvidesTangentOperator;
+
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+@Includes
+{
+    #ifndef LIB_MFRONT_TENSORFLOW
+    #define LIB_MFRONT_TENSORFLOW 1
+
+    #include "cppflow/cppflow.h"
+    #include "nn_mfront.hxx"
+    #include <vector>
+
+    struct NN {
+        inline NN(const std::string& model_path)
+            : model(model_path) {}
+
+        inline std::tuple<
+            nmf::Stensor>
+        stress(
+                const nmf::Stensor& strain)
+        {
+            cppflow::tensor strain_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+
+            auto outputs = model({{{"stress_epsilon:0", strain_tf}}},
+                                 {{"PartitionedCall:0"}});
+
+            nmf::Stensor sig;
+            nmf::tf_to_stensor(outputs[0], sig);
+
+            return {sig};
+        }
+
+        inline std::tuple<
+            nmf::Stensor4>
+        tangentop(
+                const nmf::Stensor& strain)
+        {
+            cppflow::tensor strain_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+
+            auto outputs = model({{{"tangentop_epsilon:0", strain_tf}}},
+                                 {{"PartitionedCall_1:0"}});
+
+            nmf::Stensor4 K;
+            nmf::tf_to_st2tost2(outputs[0], K);
+
+            return {K};
+        }
+
+        private:
+            cppflow::model model;
+    };
+
+    inline NN& getNN() {
+        static NN nn("../../model/nl_model");
+        return nn;
+    }
+
+    #endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@Integrator {
+    static NN nn("../../model/nl_model");
+    sig = nn.stress(eto + deto);
+    Dt  = nn.tangentop(eto + deto);
+}

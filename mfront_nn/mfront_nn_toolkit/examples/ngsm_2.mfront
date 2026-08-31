@@ -1,0 +1,122 @@
+@DSL ImplicitII;
+@Behaviour NeuralGSM;
+@Author Marius Duvillard;
+@Date 21 / 01 / 2026;
+@Description{
+    "Behaviour based on a neural GSM multi-function TensorFlow neural network."}
+
+@Profiling true;
+@ModellingHypothesis Tridimensional;
+@Theta 1.0;
+@Epsilon 1e-16;
+
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+@Includes
+{
+    #ifndef LIB_MFRONT_TENSORFLOW
+    #define LIB_MFRONT_TENSORFLOW 1
+
+    #include "cppflow/cppflow.h"
+    #include "nn_mfront.hxx"
+    #include <vector>
+
+    struct NN {
+        inline NN(const std::string& model_path)
+            : model(model_path) {}
+
+        inline std::tuple<
+            nmf::Stensor,
+            nmf::Stensor4,
+            nmf::Stensor4>
+        phi1(
+                const nmf::Stensor& strain,
+                const nmf::Stensor& alpha)
+        {
+            cppflow::tensor strain_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+
+            cppflow::tensor alpha_tf(std::vector<double>(alpha.begin(), alpha.end()), {6});
+
+            auto outputs = model({{{"phi1_epsilon:0", strain_tf}, {"phi1_alpha:0", alpha_tf}}},
+                                 {{"PartitionedCall:2", "PartitionedCall:1", "PartitionedCall:0"}});
+
+            nmf::Stensor phi1_val;
+            nmf::tf_to_stensor(outputs[0], phi1_val);
+
+            nmf::Stensor4 dphi1_dx;
+            nmf::tf_to_st2tost2(outputs[1], dphi1_dx);
+
+            nmf::Stensor4 dphi1_dy;
+            nmf::tf_to_st2tost2(outputs[2], dphi1_dy);
+
+            return {phi1_val, dphi1_dx, dphi1_dy};
+        }
+
+        inline std::tuple<
+            nmf::Stensor,
+            nmf::Stensor4,
+            nmf::Stensor4>
+        phi2(
+                const nmf::Stensor& strain,
+                const nmf::Stensor& alpha)
+        {
+            cppflow::tensor strain_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+
+            cppflow::tensor alpha_tf(std::vector<double>(alpha.begin(), alpha.end()), {6});
+
+            auto outputs = model({{{"phi2_epsilon:0", strain_tf}, {"phi2_alpha:0", alpha_tf}}},
+                                 {{"PartitionedCall_1:0", "PartitionedCall_1:2", "PartitionedCall_1:1"}});
+
+            nmf::Stensor phi2_val;
+            nmf::tf_to_stensor(outputs[0], phi2_val);
+
+            nmf::Stensor4 dphi2_dx;
+            nmf::tf_to_st2tost2(outputs[1], dphi2_dx);
+
+            nmf::Stensor4 dphi2_dy;
+            nmf::tf_to_st2tost2(outputs[2], dphi2_dy);
+
+            return {phi2_val, dphi2_dx, dphi2_dy};
+        }
+
+        private:
+            cppflow::model model;
+    };
+
+    inline NN& getNN() {
+        static NN nn("../../model/new_model");
+        return nn;
+    }
+
+    #endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@StateVariable StrainStensor alpha;
+
+@Integrator
+{
+    auto& nn = getNN();
+    auto [phi2_val, dphi2_dx, dphi2_dy]
+        = nn.phi2(eto + theta * deto, alpha + theta * dalpha);
+    falpha         -= dt * phi2_val;
+    dfalpha_ddalpha -= theta * dt * dphi2_dy;
+}
+
+@ComputeFinalStress
+{
+    auto& nn = getNN();
+    auto [sig_val, dphi1_dx, dphi1_dy] = nn.phi1(eto + deto, alpha);
+    sig = sig_val;
+}
+
+@TangentOperator
+{
+    auto& nn = getNN();
+    auto [sig_val, dphi1_dx, dphi1_dy] = nn.phi1(eto + deto, alpha);
+    auto [phi2_val, dphi2_dx, dphi2_dy]
+        = nn.phi2(eto + theta * deto, alpha - (1.0 - theta) * dalpha);
+    dfalpha_ddeto = -theta * dt * dphi2_dx;
+    auto ddalpha_ddeto = Stensor4{};
+    getIntegrationVariablesDerivatives_eto(ddalpha_ddeto);
+    Dt = 2 * dphi1_dx + dphi1_dy * ddalpha_ddeto;
+}

@@ -1,0 +1,25 @@
+@Author Marius Duvillard;
+@Date 28 janvier 2026;
+@Description{
+    "Biaxial test"};
+
+// Loading
+
+//* The constitutive law
+@Behaviour < generic > './src/libBehaviour.so' 'nn_visco';
+
+// @CompareToNumericalJacobian true;
+// @PerturbationValueForNumericalJacobianComputation 1e-8;
+// @CompareToNumericalTangentOperator true;
+// @NumericalTangentOperatorPerturbationValue 1.e-8;
+// @MaterialProperty < constant > 'NortonCoefficient' 8.e-67;
+// @MaterialProperty < constant > 'NortonExponent' 8.2;
+//* Constant temperature
+@ExternalStateVariable 'Temperature' 300.0; // Temperature in Kelvin
+//* Mechanical Loading
+@ImposedStress 'SXX' {0. : 0., 30.0 : 40.e6};
+@ImposedStress 'SXY' {0. : 0., 30.0 : 40.e6};
+//* Time discretization
+@Times{0., 30.0 in 100};
+//@Test<file> 'vel1.ref' {'SZZ':10} 1e6;
+@UserDefinedPostProcessing 'norton_nn.res' {'EXY', 'EXY'};

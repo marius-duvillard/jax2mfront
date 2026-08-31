@@ -1,0 +1,169 @@
+@DSL Implicit;
+
+@Behaviour norton_hardening_nn;
+@Author HELFER Thomas;
+@Date 29 / 01 / 2026;
+@Description
+{
+}
+@Profiling true;
+@AuxiliaryStateVariable real niter;
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+@ModellingHypothesis Tridimensional;
+@Includes
+{
+#ifndef LIB_MFRONT_TENSORFLOW
+#define LIB_MFRONT_TENSORFLOW 1
+
+#include "cppflow/cppflow.h"
+#include <vector>
+#include <iostream>
+
+    inline void to_stensor(const cppflow::tensor &t, tfel::math::stensor<3u, double> &r)
+    {
+        auto data = t.get_data<double>(); // unique copie du tensor TF
+        for (size_t i = 0; i < 6; ++i)
+            r[i] = data[i];
+    }
+
+    // Remplit un st2tost2 préalloué à partir d'un tensor TF
+    inline void to_st2tost2(const cppflow::tensor &t, tfel::math::st2tost2<3u, double> &r)
+    {
+        auto data = t.get_data<double>(); // unique copie du tensor TF
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                r(i, j) = data[i * 6 + j];
+    }
+
+    struct NN
+    {
+        inline NN(const std::string &model_path)
+            : model(model_path) {}
+
+        // Phi2
+        inline std::tuple<
+            tfel::math::stensor<3u, double>,
+            double,
+            tfel::math::stensor<3u, double>,
+            tfel::math::st2tost2<3u, double>,
+            tfel::math::stensor<3u, double>,
+            tfel::math::st2tost2<3u, double>,
+            tfel::math::stensor<3u, double>,
+            double,
+            tfel::math::stensor<3u, double>,
+            tfel::math::st2tost2<3u, double>,
+            tfel::math::stensor<3u, double>,
+            tfel::math::st2tost2<3u, double>>
+        phi2_and_derivatives(const tfel::math::stensor<3u, double> &sigma, const double &p, const tfel::math::stensor<3u, double> &alpha)
+        {
+            // --- buffers statiques pour éviter allocations ---
+            static std::vector<double> sigma_buffer(6);
+            static std::vector<double> alpha_buffer(6);
+            static std::vector<double> p_buffer(1);
+
+            for (size_t i = 0; i < 6; ++i)
+            {
+                sigma_buffer[i] = sigma[i];
+                alpha_buffer[i] = alpha[i];
+            }
+            p_buffer[0] = p;
+
+            cppflow::tensor sigma_tf(sigma_buffer, {6});
+            cppflow::tensor alpha_tf(alpha_buffer, {6});
+            cppflow::tensor p_tf(p_buffer, {1});
+
+            auto outputs = model({{"phi2_sigma:0", sigma_tf},
+                                  {"phi2_p:0", p_tf},
+                                  {"phi2_alpha:0", alpha_tf}},
+                                 {"PartitionedCall:4", "PartitionedCall:5", "PartitionedCall:0", "PartitionedCall:1", "PartitionedCall:2", "PartitionedCall:3"});
+
+            tfel::math::stensor<3u, double> depsp;
+            tfel::math::stensor<3u, double> dalpha;
+            tfel::math::st2tost2<3u, double> ddepsp_dsig;
+            tfel::math::stensor<3u, double> ddepsp_dp;
+            tfel::math::st2tost2<3u, double> ddepsp_dalpha;
+            tfel::math::stensor<3u, double> ddp_dsig;
+            tfel::math::stensor<3u, double> ddp_dalpha;
+            tfel::math::st2tost2<3u, double> ddalpha_dsig;
+            tfel::math::stensor<3u, double> ddalpha_dp;
+            tfel::math::st2tost2<3u, double> ddalpha_dalpha;
+            double dp;
+            double ddp_dp;
+
+            // --- remplir les buffers préalloués avec les outputs TF ---
+            to_stensor(outputs[0], depsp);             // epsp_dot -> depsp
+            dp = outputs[1].get_data<double>()[0];     // p_dot
+            to_stensor(outputs[2], dalpha);            // alpha_dot -> dalpha
+            to_st2tost2(outputs[3], ddepsp_dsig);      // ddepsp_dsig
+            to_stensor(outputs[4], ddepsp_dp);         // ddepsp_dp
+            to_st2tost2(outputs[5], ddepsp_dalpha);    // ddepsp_dalpha
+            to_stensor(outputs[6], ddp_dsig);          // ddp_dsig
+            ddp_dp = outputs[7].get_data<double>()[0]; // ddp_ddp
+            to_stensor(outputs[8], ddp_dalpha);        // ddp_dalpha
+            to_st2tost2(outputs[9], ddalpha_dsig);     // ddalpha_dsig
+            to_stensor(outputs[10], ddalpha_dp);       // ddalpha_dp
+            to_st2tost2(outputs[11], ddalpha_dalpha);  // ddalpha_dalpha
+
+            return {depsp, dp, dalpha, ddepsp_dsig, ddepsp_dp, ddepsp_dalpha, ddp_dsig, ddp_dp, ddp_dalpha, ddalpha_dsig, ddalpha_dp, ddalpha_dalpha};
+        }
+
+    private:
+        cppflow::model model;
+    };
+
+    // -----------------------------------------------------------------
+    // Singleton: loaded ONE time only
+    // -----------------------------------------------------------------
+    inline NN &getNN()
+    {
+        static NN nn("../../model/norton_iso_kin_nn");
+        return nn;
+    }
+
+#endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@Algorithm NewtonRaphson;
+@Epsilon 1.e-14;
+@Theta 1.;
+
+@StateVariable StrainStensor evp;
+@StateVariable StrainStensor alpha;
+@StateVariable strain p;
+
+evp.setGlossaryName("ViscoplasticStrain");
+p.setEntryName("p");
+
+@Brick StandardElasticity{
+    young_modulus : 150e9,
+    poisson_ratio : 0.3
+};
+
+@Integrator
+{
+    auto &nn = getNN();
+    feel += devp; // feel = deel-deto+devp;
+    dfeel_ddevp = Stensor4::Id();
+    auto vp = nn.phi2_and_derivatives(
+        sig,
+        p + theta * dp, alpha + theta * dalpha);
+    fevp -= dt * std::get<0>(vp);
+    fp -= dt * std::get<1>(vp);
+    falpha -= dt * std::get<2>(vp);
+
+    const auto De = lambda * Stensor4::IxI() + 2 * mu * Stensor4::Id();
+
+    dfevp_ddeel -= dt * theta * std::get<3>(vp) * De;
+    dfevp_ddp -= dt * theta * std::get<4>(vp);
+    dfevp_ddalpha -= dt * theta * std::get<5>(vp);
+
+    dfp_ddeel -= dt * theta * (std::get<6>(vp) | De);
+    dfp_ddp -= dt * theta * std::get<7>(vp);
+    dfp_ddalpha -= dt * theta * (std::get<8>(vp) | De);
+
+    dfalpha_ddeel -= dt * theta * std::get<9>(vp) * De;
+    dfalpha_ddp -= dt * theta * std::get<10>(vp);
+    dfalpha_ddeel -= dt * theta * std::get<11>(vp);
+
+    ++niter;
+}

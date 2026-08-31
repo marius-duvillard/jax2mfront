@@ -1,0 +1,62 @@
+{
+  "_comment": "ngsm_branch: ImplicitII, GSM with 3 alpha branches (fsarray<3,stensor>)",
+
+  "behaviour": "NeuralGSM",
+  "author": "Marius Duvillard",
+  "date": "11 / 02 / 2026",
+  "description": "Behaviour based on a neural GSM multi-function TensorFlow neural network with 3 branches.",
+
+  "dsl": "ImplicitII",
+  "modelling_hypothesis": "Tridimensional",
+  "theta": 1.0,
+  "epsilon": 1e-16,
+
+  "tensorflow": {
+    "lib_path": "../../dependencies/libtensorflow-2.6.0/lib",
+    "model_path": "../../model/visco_branch_nn"
+  },
+
+  "standard_elasticity": { "enabled": false },
+
+  "state_variables": [
+    {
+      "name": "alpha",
+      "type": "StrainStensor",
+      "array_size": 3
+    }
+  ],
+
+  "aux_state_variables": [],
+
+  "nn_functions": [
+    {
+      "name": "phi1",
+      "signature_name": "phi1",
+      "inputs": [
+        { "name": "strain", "tf_input": "phi1_epsilon:0", "type": "stensor",       "shape": [6]    },
+        { "name": "alpha",  "tf_input": "phi1_alpha:0",   "type": "stensor_array", "count": 3, "shape": [3,6] }
+      ],
+      "outputs": [
+        { "name": "stress",     "tf_output": "PartitionedCall:2", "type": "stensor",        "index": 0 },
+        { "name": "dphi1_deto", "tf_output": "PartitionedCall:1", "type": "st2tost2",       "index": 1 },
+        { "name": "dphi1_dalpha", "tf_output": "PartitionedCall:0", "type": "st2tost2_array", "count": 3, "index": 2 }
+      ]
+    },
+    {
+      "name": "phi2",
+      "signature_name": "phi2",
+      "inputs": [
+        { "name": "strain", "tf_input": "phi2_epsilon:0", "type": "stensor",       "shape": [6]    },
+        { "name": "alpha",  "tf_input": "phi2_alpha:0",   "type": "stensor_array", "count": 3, "shape": [3,6] }
+      ],
+      "outputs": [
+        { "name": "phi2_val",    "tf_output": "PartitionedCall_1:0", "type": "stensor_array",        "count": 3, "index": 0 },
+        { "name": "dphi2_deto",  "tf_output": "PartitionedCall_1:2", "type": "st2tost2_array",       "count": 3, "index": 1 },
+        { "name": "dphi2_dalpha","tf_output": "PartitionedCall_1:1", "type": "st2tost2_matrix", "rows": 3, "cols": 3, "index": 2 }
+      ]
+    }
+  ],
+
+  "integrator_template": "ngsm_branch_alpha",
+  "branch_count": 3
+}

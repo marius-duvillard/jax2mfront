@@ -1,0 +1,59 @@
+{
+  "_comment": "norton_nn: viscoplasticity pure, phi2(sigma) -> (depsp, ddepsp_dsig)",
+
+  "behaviour": "norton_nn",
+  "author": "Duvillard Marius",
+  "date": "29 / 01 / 2026",
+  "description": "Behaviour based on a TensorFlow neural network for Norton-type viscoplasticity.",
+
+  "dsl": "Implicit",
+  "modelling_hypothesis": "Tridimensional",
+  "algorithm": "NewtonRaphson",
+  "theta": 0.5,
+  "epsilon": 1e-14,
+
+  "tensorflow": {
+    "lib_path": "../../dependencies/libtensorflow-2.6.0/lib",
+    "model_path": "../../model/norton_nn"
+  },
+
+  "standard_elasticity": {
+    "enabled": true,
+    "young_modulus": 150e9,
+    "poisson_ratio": 0.3
+  },
+
+  "state_variables": [
+    {
+      "name": "evp",
+      "type": "StrainStensor",
+      "glossary_name": "ViscoplasticStrain"
+    }
+  ],
+
+  "aux_state_variables": [],
+
+  "nn_functions": [
+    {
+      "name": "phi2",
+      "signature_name": "phi2",
+      "inputs": [
+        { "name": "sigma", "tf_input": "phi2_sigma:0", "type": "stensor" }
+      ],
+      "outputs": [
+        { "name": "depsp",       "tf_output": "PartitionedCall:1", "type": "stensor",  "index": 0 },
+        { "name": "ddepsp_dsig", "tf_output": "PartitionedCall:0", "type": "st2tost2", "index": 1 }
+      ]
+    }
+  ],
+
+  "integrator_template": "standard_elasticity_phi2_sigma",
+
+  "_integrator_note": [
+    "feel += devp;",
+    "auto vp = nn.phi2(sig);",
+    "fevp -= dt * depsp;",
+    "dfeel_ddevp = Id;",
+    "dfevp_ddeel -= dt * theta * ddepsp_dsig * De;"
+  ]
+}

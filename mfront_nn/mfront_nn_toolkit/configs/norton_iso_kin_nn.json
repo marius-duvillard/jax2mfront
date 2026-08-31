@@ -1,0 +1,75 @@
+{
+  "_comment": "norton_iso_kin_nn: isotropic + kinematic hardening, phi2(sigma,p,alpha)",
+
+  "behaviour": "norton_iso_kin_nn",
+  "author": "HELFER Thomas",
+  "date": "29 / 01 / 2026",
+  "description": "Norton viscoplasticity with isotropic + kinematic hardening.",
+
+  "dsl": "Implicit",
+  "modelling_hypothesis": "Tridimensional",
+  "algorithm": "NewtonRaphson",
+  "theta": 1.0,
+  "epsilon": 1e-14,
+  "profiling": true,
+
+  "tensorflow": {
+    "lib_path": "../../dependencies/libtensorflow-2.6.0/lib",
+    "model_path": "../../model/norton_iso_kin_nn"
+  },
+
+  "standard_elasticity": {
+    "enabled": true,
+    "young_modulus": 150e9,
+    "poisson_ratio": 0.3
+  },
+
+  "state_variables": [
+    {
+      "name": "evp",
+      "type": "StrainStensor",
+      "glossary_name": "ViscoplasticStrain"
+    },
+    {
+      "name": "alpha",
+      "type": "StrainStensor"
+    },
+    {
+      "name": "p",
+      "type": "strain",
+      "entry_name": "p"
+    }
+  ],
+
+  "aux_state_variables": [
+    { "name": "niter", "type": "real" }
+  ],
+
+  "nn_functions": [
+    {
+      "name": "phi2",
+      "signature_name": "phi2",
+      "inputs": [
+        { "name": "sigma", "tf_input": "phi2_sigma:0", "type": "stensor" },
+        { "name": "p",     "tf_input": "phi2_p:0",     "type": "scalar"  },
+        { "name": "alpha", "tf_input": "phi2_alpha:0",  "type": "stensor" }
+      ],
+      "outputs": [
+        { "name": "depsp",          "tf_output": "PartitionedCall:4",  "type": "stensor",  "index": 0 },
+        { "name": "dp",             "tf_output": "PartitionedCall:5",  "type": "scalar",   "index": 1 },
+        { "name": "dalpha",         "tf_output": "PartitionedCall:0",  "type": "stensor",  "index": 2 },
+        { "name": "ddepsp_dsig",    "tf_output": "PartitionedCall:1",  "type": "st2tost2", "index": 3 },
+        { "name": "ddepsp_dp",      "tf_output": "PartitionedCall:2",  "type": "stensor",  "index": 4 },
+        { "name": "ddepsp_dalpha",  "tf_output": "PartitionedCall:3",  "type": "st2tost2", "index": 5 },
+        { "name": "ddp_dsig",       "tf_output": "PartitionedCall:4",  "type": "stensor",  "index": 6 },
+        { "name": "ddp_dp",         "tf_output": "PartitionedCall:5",  "type": "scalar",   "index": 7 },
+        { "name": "ddp_dalpha",     "tf_output": "PartitionedCall:6",  "type": "stensor",  "index": 8 },
+        { "name": "ddalpha_dsig",   "tf_output": "PartitionedCall:7",  "type": "st2tost2", "index": 9 },
+        { "name": "ddalpha_dp",     "tf_output": "PartitionedCall:8",  "type": "stensor",  "index": 10 },
+        { "name": "ddalpha_dalpha", "tf_output": "PartitionedCall:9",  "type": "st2tost2", "index": 11 }
+      ]
+    }
+  ],
+
+  "integrator_template": "standard_elasticity_phi2_sigma_p_alpha"
+}
