@@ -1,0 +1,27 @@
+@Author Marius Duvillard;
+@Date 12 janvier 2026;
+@Description{
+    "Uniaxial relaxation test"
+    "mtest relax.mtest"};
+
+// Loading
+
+//* The constitutive law
+@Behaviour < generic > './src/libBehaviour.so' 'NortonHardening';
+
+@ExternalStateVariable 'Temperature' 300.0; // Temperature in Kelvin
+@ImposedStrain 'EXY' {
+    0.0 : 0.0,
+    0.1 : 0.002,   // début plasticité
+    0.2 : 0.0,     // décharge
+    0.3 : 0.0035,  // dépasse l'ancien max → isotrope
+    0.4 : -0.0025, // inversion → cinématique
+    0.5 : 0.0045,  // nouveau max → isotrope
+    0.6 : 0.0
+};
+
+@Times{
+    0.0,
+    // 0.2 in 200,
+    0.6 in 600};
+@UserDefinedPostProcessing 'relax_gt.res' {'EXY', 'SXY', 'EquivalentViscoplasticStrain'};

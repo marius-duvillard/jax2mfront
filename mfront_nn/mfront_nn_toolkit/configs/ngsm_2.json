@@ -1,0 +1,61 @@
+{
+  "_comment": "ngsm_2: ImplicitII, GSM thermodynamique, phi1(eps,alpha)+phi2(eps,alpha), 1 alpha",
+
+  "behaviour": "NeuralGSM",
+  "author": "Marius Duvillard",
+  "date": "21 / 01 / 2026",
+  "description": "Behaviour based on a neural GSM multi-function TensorFlow neural network.",
+
+  "dsl": "ImplicitII",
+  "modelling_hypothesis": "Tridimensional",
+  "theta": 1.0,
+  "epsilon": 1e-16,
+  "profiling": true,
+
+  "tensorflow": {
+    "lib_path": "../../dependencies/libtensorflow-2.6.0/lib",
+    "model_path": "../../model/new_model"
+  },
+
+  "standard_elasticity": { "enabled": false },
+
+  "state_variables": [
+    {
+      "name": "alpha",
+      "type": "StrainStensor"
+    }
+  ],
+
+  "aux_state_variables": [],
+
+  "nn_functions": [
+    {
+      "name": "phi1",
+      "signature_name": "phi1",
+      "inputs": [
+        { "name": "strain", "tf_input": "phi1_epsilon:0", "type": "stensor" },
+        { "name": "alpha",  "tf_input": "phi1_alpha:0",   "type": "stensor" }
+      ],
+      "outputs": [
+        { "name": "phi1_val",  "tf_output": "PartitionedCall:2", "type": "stensor",  "index": 0 },
+        { "name": "dphi1_dx", "tf_output": "PartitionedCall:1", "type": "st2tost2", "index": 1 },
+        { "name": "dphi1_dy", "tf_output": "PartitionedCall:0", "type": "st2tost2", "index": 2 }
+      ]
+    },
+    {
+      "name": "phi2",
+      "signature_name": "phi2",
+      "inputs": [
+        { "name": "strain", "tf_input": "phi2_epsilon:0", "type": "stensor" },
+        { "name": "alpha",  "tf_input": "phi2_alpha:0",   "type": "stensor" }
+      ],
+      "outputs": [
+        { "name": "phi2_val",  "tf_output": "PartitionedCall_1:0", "type": "stensor",  "index": 0 },
+        { "name": "dphi2_dx", "tf_output": "PartitionedCall_1:2", "type": "st2tost2", "index": 1 },
+        { "name": "dphi2_dy", "tf_output": "PartitionedCall_1:1", "type": "st2tost2", "index": 2 }
+      ]
+    }
+  ],
+
+  "integrator_template": "ngsm_single_alpha"
+}

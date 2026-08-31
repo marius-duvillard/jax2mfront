@@ -1,0 +1,34 @@
+@Author Marius Duvillard;
+@Date 12 janvier 2026;
+@Description{
+    "Uniaxial relaxation test"
+    "mtest relax.mtest"};
+
+// Loading
+
+//* The constitutive law
+@Behaviour < generic > './src/libBehaviour.so' 'ImplicitNorton';
+
+// @CompareToNumericalJacobian true;
+// @PerturbationValueForNumericalJacobianComputation 1e-8;
+// @CompareToNumericalTangentOperator true;
+// @NumericalTangentOperatorPerturbationValue 1.e-8;
+@MaterialProperty<constant>   'NortonCoefficient' 8.e-67;
+@MaterialProperty<constant>   'NortonExponent' 8.2;
+//* Constant temperature
+@ExternalStateVariable 'Temperature' 300.0; // Temperature in Kelvin
+@ImposedStrain 'EXY' {
+    0.0 : 0.0,
+    0.1 : 0.008,
+    // 0.15 : 0.002,
+    0.2 : 0.0,
+    0.3 : 0.008,
+    0.4 : 0.0   
+
+};
+
+@Times{
+    0.0,
+    0.2 in 200,
+    0.4 in 200};
+@UserDefinedPostProcessing 'relax_gt.res' {'EXY', 'SXY','EquivalentViscoplasticStrain'};

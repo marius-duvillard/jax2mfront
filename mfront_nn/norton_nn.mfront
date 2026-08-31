@@ -1,0 +1,111 @@
+@DSL Implicit;
+
+@Behaviour norton_nn;
+@Author Duvillard Marius;
+@Date 29 / 01 / 2026;
+@Description
+{
+}
+@ModellingHypothesis Tridimensional;
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+@Includes
+{
+#ifndef LIB_MFRONT_TENSORFLOW
+#define LIB_MFRONT_TENSORFLOW 1
+
+#include "cppflow/cppflow.h"
+#include <vector>
+#include <iostream>
+
+    inline tfel::math::stensor<3u, double>
+
+    to_stensor(const cppflow::tensor &t)
+    {
+        tfel::math::stensor<3u, double> r;
+        const auto data = t.get_data<double>();
+        for (size_t i = 0; i < 6; ++i)
+            r[i] = data[i];
+        return r;
+    }
+
+    inline tfel::math::st2tost2<3u, double>
+    to_st2tost2(const cppflow::tensor &t)
+    {
+        tfel::math::st2tost2<3u, double> r;
+        const auto data = t.get_data<double>();
+        for (size_t i = 0; i < 6; ++i)
+            for (size_t j = 0; j < 6; ++j)
+                r(i, j) = data[i * 6 + j];
+        return r;
+    }
+
+    struct NN
+    {
+        inline NN(const std::string &model_path)
+            : model(model_path) {}
+
+        // Phi2
+        inline std::tuple<tfel::math::stensor<3u, double>,
+                          tfel::math::st2tost2<3u, double>>
+        phi2_and_derivatives(const tfel::math::stensor<3u, double> &sigma)
+        {
+            cppflow::tensor sigma_tf(std::vector<double>(sigma.begin(), sigma.end()), {6});
+
+            // The labeling is automatic check with
+            // saved_model_cli show --dir gsm_model2/ --tag_set serve --signature_def phi2
+            auto outputs = model({{"phi2_sigma:0", sigma_tf}},
+                                 {"PartitionedCall:1", "PartitionedCall:0"});
+
+            cppflow::tensor &epsp_dot_tf = outputs[0];
+            cppflow::tensor &epsp_dot_dsig_tf = outputs[1];
+
+            auto epsp_dot = to_stensor(epsp_dot_tf);
+
+            auto epsp_dot_dsig = to_st2tost2(epsp_dot_dsig_tf);
+            return {
+                epsp_dot,      // stensor
+                epsp_dot_dsig, // st2tost2
+            };
+        }
+
+    private:
+        cppflow::model model;
+    };
+
+    // -----------------------------------------------------------------
+    // Singleton: loaded ONE time only
+    // -----------------------------------------------------------------
+    inline NN &getNN()
+    {
+        static NN nn("../../model/norton_nn");
+        return nn;
+    }
+
+#endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@Algorithm NewtonRaphson;
+@Epsilon 1.e-14;
+@Theta 0.5;
+
+@StateVariable StrainStensor evp;
+
+evp.setGlossaryName("ViscoplasticStrain");
+
+@Brick StandardElasticity{
+    young_modulus : 150e9,
+    poisson_ratio : 0.3
+};
+
+@Integrator
+{
+    auto &nn = getNN();
+
+    feel += devp; // feel = deel-deto+devp;
+    auto vp = nn.phi2_and_derivatives(sig);
+    fevp -= dt * std::get<0>(vp);
+
+    dfeel_ddevp = Stensor4::Id();
+    const auto De = lambda * Stensor4::IxI() + 2 * mu * Stensor4::Id();
+    dfevp_ddeel -= dt * theta * std::get<1>(vp) * De;
+}

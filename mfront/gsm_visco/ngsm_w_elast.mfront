@@ -1,0 +1,63 @@
+@DSL Implicit;
+@Behaviour NeuralGSM;
+@Author Marius Duvillard;
+@Date 30 / 01 / 2026;
+@Description{
+    "Behaviour based on a neural GSM multi-function TensorFlow neural network"}
+
+@Link{
+    "-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow -L/DISK2/md266594/Workspace/jax2mfront/mfront/gsm_visco -lneuralgsm "};
+@Includes
+{
+#include "nn_interface.hxx"
+}
+
+@ModellingHypothesis Tridimensional;
+@Algorithm NewtonRaphson;
+@Epsilon 1.e-14;
+@Theta 1;
+
+@StateVariable StrainStensor evp;
+evp.setGlossaryName("ViscoplasticStrain");
+
+@Brick StandardElasticity{
+    young_modulus : 200.0e9,
+    poisson_ratio : 0.31
+};
+
+@Integrator
+{
+    feel += devp; // feel = deel-deto+devp;
+    dfeel_ddevp += Stensor4::Id();
+    const auto vp = neuralgsm::phi2_and_derivatives(eto + theta * deto, evp + theta * devp);
+    fevp -= dt * std::get<0>(vp);
+    // dfevp_ddevp -= dt * theta * std::get<2>(vp);
+    const auto De = lambda * Stensor4::IxI() + 2 * mu * Stensor4::Id();
+    dfeel_ddeel -= dt * theta * std::get<1>(vp); //* De;
+}
+
+// @Integrator
+// {
+//     auto phi2_result = neuralgsm::phi2_and_derivatives(
+//         eto + theta * deto,
+//         alpha + theta * dalpha);
+//     falpha -= dt * std::get<0>(phi2_result);
+//     dfalpha_ddalpha -= theta * dt * std::get<2>(phi2_result);
+// }
+
+// @ComputeFinalStress
+// {
+//     auto r = neuralgsm::phi1_and_derivatives(eto + deto, alpha);
+//     sig = std::get<0>(r);
+// }
+
+// @TangentOperator
+// {
+//     auto phi1_result = neuralgsm::phi1_and_derivatives(eto + deto, alpha);
+//     auto phi2_result = neuralgsm::phi2_and_derivatives(eto + theta * deto, alpha - (1 - theta) * dalpha);
+//     dfalpha_ddeto = -theta * dt * std::get<1>(phi2_result);
+//     auto ddalpha_ddeto = Stensor4{};
+//     getIntegrationVariablesDerivatives_eto(ddalpha_ddeto);
+
+//     Dt = 2 * std::get<1>(phi1_result) + std::get<2>(phi1_result) * ddalpha_ddeto;
+// }

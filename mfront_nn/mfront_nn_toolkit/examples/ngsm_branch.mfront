@@ -1,0 +1,144 @@
+@DSL ImplicitII;
+@Behaviour NeuralGSM;
+@Author Marius Duvillard;
+@Date 11 / 02 / 2026;
+@Description{
+    "Behaviour based on a neural GSM multi-function TensorFlow neural network with 3 branches."}
+
+@ModellingHypothesis Tridimensional;
+@Theta 1.0;
+@Epsilon 1e-16;
+
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+@Includes
+{
+    #ifndef LIB_MFRONT_TENSORFLOW
+    #define LIB_MFRONT_TENSORFLOW 1
+
+    #include "cppflow/cppflow.h"
+    #include "nn_mfront.hxx"
+    #include <vector>
+
+    struct NN {
+        inline NN(const std::string& model_path)
+            : model(model_path) {}
+
+        inline std::tuple<
+            nmf::Stensor,
+            nmf::Stensor4,
+            tfel::math::fsarray<3, nmf::Stensor4>>
+        phi1(
+                const nmf::Stensor& strain,
+                const tfel::math::fsarray<3, nmf::Stensor>& alpha)
+        {
+            cppflow::tensor strain_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+
+            std::vector<double> alpha_data;
+            alpha_data.reserve(3 * 6);
+            for (size_t _i = 0; _i < 3; ++_i)
+                for (size_t _j = 0; _j < 6; ++_j)
+                    alpha_data.push_back(alpha[_i][_j]);
+            cppflow::tensor alpha_tf(alpha_data, {3, 6});
+
+            auto outputs = model({{{"phi1_epsilon:0", strain_tf}, {"phi1_alpha:0", alpha_tf}}},
+                                 {{"PartitionedCall:2", "PartitionedCall:1", "PartitionedCall:0"}});
+
+            nmf::Stensor stress;
+            nmf::tf_to_stensor(outputs[0], stress);
+
+            nmf::Stensor4 dphi1_deto;
+            nmf::tf_to_st2tost2(outputs[1], dphi1_deto);
+
+            tfel::math::fsarray<3, nmf::Stensor4> dphi1_dalpha;
+            nmf::tf_to_stensor4_array<3>(outputs[2], dphi1_dalpha);
+
+            return {stress, dphi1_deto, dphi1_dalpha};
+        }
+
+        inline std::tuple<
+            tfel::math::fsarray<3, nmf::Stensor>,
+            tfel::math::fsarray<3, nmf::Stensor4>,
+            tfel::math::fsarray<9, nmf::Stensor4>>
+        phi2(
+                const nmf::Stensor& strain,
+                const tfel::math::fsarray<3, nmf::Stensor>& alpha)
+        {
+            cppflow::tensor strain_tf(std::vector<double>(strain.begin(), strain.end()), {6});
+
+            std::vector<double> alpha_data;
+            alpha_data.reserve(3 * 6);
+            for (size_t _i = 0; _i < 3; ++_i)
+                for (size_t _j = 0; _j < 6; ++_j)
+                    alpha_data.push_back(alpha[_i][_j]);
+            cppflow::tensor alpha_tf(alpha_data, {3, 6});
+
+            auto outputs = model({{{"phi2_epsilon:0", strain_tf}, {"phi2_alpha:0", alpha_tf}}},
+                                 {{"PartitionedCall_1:0", "PartitionedCall_1:2", "PartitionedCall_1:1"}});
+
+            tfel::math::fsarray<3, nmf::Stensor> phi2_val;
+            nmf::tf_to_stensor_array<3>(outputs[0], phi2_val);
+
+            tfel::math::fsarray<3, nmf::Stensor4> dphi2_deto;
+            nmf::tf_to_stensor4_array<3>(outputs[1], dphi2_deto);
+
+            tfel::math::fsarray<9, nmf::Stensor4> dphi2_dalpha;
+            nmf::tf_to_stensor4_matrix<3,3>(outputs[2], dphi2_dalpha);
+
+            return {phi2_val, dphi2_deto, dphi2_dalpha};
+        }
+
+        private:
+            cppflow::model model;
+    };
+
+    inline NN& getNN() {
+        static NN nn("../../model/visco_branch_nn");
+        return nn;
+    }
+
+    #endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@StateVariable StrainStensor alpha[3];
+
+@Integrator
+{
+    auto alpha_theta = alpha;
+    for (size_t i = 0; i < 3; ++i)
+        alpha_theta[i] += theta * dalpha[i];
+    auto& nn = getNN();
+    auto [phi2_val, dphi2_deto, dphi2_dalpha]
+        = nn.phi2(eto + theta * deto, alpha_theta);
+    for (size_t i = 0; i < 3; ++i) {
+        falpha(i) -= dt * phi2_val[i];
+        for (size_t j = 0; j < 3; ++j)
+            dfalpha_ddalpha(i, j) -= theta * dt * dphi2_dalpha[i * 3 + j];
+    }
+}
+
+@ComputeFinalStress
+{
+    auto& nn = getNN();
+    auto [stress, dphi1_deto, dphi1_dalpha] = nn.phi1(eto + deto, alpha);
+    sig = stress;
+}
+
+@TangentOperator
+{
+    auto& nn = getNN();
+    auto [stress, dphi1_deto, dphi1_dalpha] = nn.phi1(eto + deto, alpha);
+    auto alpha_theta = alpha;
+    for (size_t i = 0; i < 3; ++i)
+        alpha_theta[i] -= (1.0 - theta) * dalpha[i];
+    auto [phi2_val, dphi2_deto, dphi2_dalpha]
+        = nn.phi2(eto + theta * deto, alpha_theta);
+    for (size_t i = 0; i < 3; ++i)
+        dfalpha_ddeto(i) = -theta * dt * dphi2_deto(i);
+    auto ddalpha_ddeto = tvector<3u, Stensor4>{};
+    getIntegrationVariablesDerivatives_eto(ddalpha_ddeto);
+    Dt = Stensor4{};
+    Dt = 2 * dphi1_deto;
+    for (size_t i = 0; i < 3; ++i)
+        Dt += dphi1_dalpha(i) * ddalpha_ddeto(i);
+}

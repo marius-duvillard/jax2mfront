@@ -1,0 +1,143 @@
+@DSL Implicit;
+@Behaviour norton_iso_kin_nn;
+@Author HELFER Thomas;
+@Date 29 / 01 / 2026;
+@Description{
+    "Norton viscoplasticity with isotropic + kinematic hardening."}
+
+@Profiling true;
+@ModellingHypothesis Tridimensional;
+@Theta 1.0;
+@Epsilon 1e-14;
+@Algorithm NewtonRaphson;
+
+@Link{"-L../../dependencies/libtensorflow-2.6.0/lib -ltensorflow"};
+
+@Includes
+{
+    #ifndef LIB_MFRONT_TENSORFLOW
+    #define LIB_MFRONT_TENSORFLOW 1
+
+    #include "cppflow/cppflow.h"
+    #include "nn_mfront.hxx"
+    #include <vector>
+
+    struct NN {
+        inline NN(const std::string& model_path)
+            : model(model_path) {}
+
+        inline std::tuple<
+            nmf::Stensor,
+            double,
+            nmf::Stensor,
+            nmf::Stensor4,
+            nmf::Stensor,
+            nmf::Stensor4,
+            nmf::Stensor,
+            double,
+            nmf::Stensor,
+            nmf::Stensor4,
+            nmf::Stensor,
+            nmf::Stensor4>
+        phi2(
+                const nmf::Stensor& sigma,
+                const double& p,
+                const nmf::Stensor& alpha)
+        {
+            cppflow::tensor sigma_tf(std::vector<double>(sigma.begin(), sigma.end()), {6});
+
+            static std::vector<double> p_buf(1);
+            p_buf[0] = p;
+            cppflow::tensor p_tf(p_buf, {1});
+
+            cppflow::tensor alpha_tf(std::vector<double>(alpha.begin(), alpha.end()), {6});
+
+            auto outputs = model({{{"phi2_sigma:0", sigma_tf}, {"phi2_p:0", p_tf}, {"phi2_alpha:0", alpha_tf}}},
+                                 {{"PartitionedCall:4", "PartitionedCall:5", "PartitionedCall:0", "PartitionedCall:1", "PartitionedCall:2", "PartitionedCall:3", "PartitionedCall:4", "PartitionedCall:5", "PartitionedCall:6", "PartitionedCall:7", "PartitionedCall:8", "PartitionedCall:9"}});
+
+            nmf::Stensor depsp;
+            nmf::tf_to_stensor(outputs[0], depsp);
+
+            double dp = outputs[1].get_data<double>()[0];
+
+            nmf::Stensor dalpha;
+            nmf::tf_to_stensor(outputs[2], dalpha);
+
+            nmf::Stensor4 ddepsp_dsig;
+            nmf::tf_to_st2tost2(outputs[3], ddepsp_dsig);
+
+            nmf::Stensor ddepsp_dp;
+            nmf::tf_to_stensor(outputs[4], ddepsp_dp);
+
+            nmf::Stensor4 ddepsp_dalpha;
+            nmf::tf_to_st2tost2(outputs[5], ddepsp_dalpha);
+
+            nmf::Stensor ddp_dsig;
+            nmf::tf_to_stensor(outputs[6], ddp_dsig);
+
+            double ddp_dp = outputs[7].get_data<double>()[0];
+
+            nmf::Stensor ddp_dalpha;
+            nmf::tf_to_stensor(outputs[8], ddp_dalpha);
+
+            nmf::Stensor4 ddalpha_dsig;
+            nmf::tf_to_st2tost2(outputs[9], ddalpha_dsig);
+
+            nmf::Stensor ddalpha_dp;
+            nmf::tf_to_stensor(outputs[10], ddalpha_dp);
+
+            nmf::Stensor4 ddalpha_dalpha;
+            nmf::tf_to_st2tost2(outputs[11], ddalpha_dalpha);
+
+            return {depsp, dp, dalpha, ddepsp_dsig, ddepsp_dp, ddepsp_dalpha, ddp_dsig, ddp_dp, ddp_dalpha, ddalpha_dsig, ddalpha_dp, ddalpha_dalpha};
+        }
+
+        private:
+            cppflow::model model;
+    };
+
+    inline NN& getNN() {
+        static NN nn("../../model/norton_iso_kin_nn");
+        return nn;
+    }
+
+    #endif /* LIB_MFRONT_TENSORFLOW */
+}
+
+@StateVariable StrainStensor evp;
+evp.setGlossaryName("ViscoplasticStrain");
+@StateVariable StrainStensor alpha;
+@StateVariable strain p;
+p.setEntryName("p");
+@AuxiliaryStateVariable real niter;
+
+@Brick StandardElasticity{
+    young_modulus : 150000000000.0,
+    poisson_ratio : 0.3
+};
+
+@Integrator
+{
+    auto& nn = getNN();
+    feel += devp;
+    dfeel_ddevp = Stensor4::Id();
+    auto [depsp, dp_rate, dalpha_rate,
+          ddepsp_dsig, ddepsp_dp, ddepsp_dalpha,
+          ddp_dsig,    ddp_dp,    ddp_dalpha,
+          ddalpha_dsig, ddalpha_dp, ddalpha_dalpha]
+        = nn.phi2(sig, p + theta * dp, alpha + theta * dalpha);
+    fevp   -= dt * depsp;
+    fp     -= dt * dp_rate;
+    falpha -= dt * dalpha_rate;
+    const auto De = lambda * Stensor4::IxI() + 2 * mu * Stensor4::Id();
+    dfevp_ddeel   -= dt * theta * ddepsp_dsig   * De;
+    dfevp_ddp     -= dt * theta * ddepsp_dp;
+    dfevp_ddalpha -= dt * theta * ddepsp_dalpha;
+    dfp_ddeel     -= dt * theta * (ddp_dsig   | De);
+    dfp_ddp       -= dt * theta * ddp_dp;
+    dfp_ddalpha   -= dt * theta * (ddp_dalpha | De);
+    dfalpha_ddeel   -= dt * theta * ddalpha_dsig   * De;
+    dfalpha_ddp     -= dt * theta * ddalpha_dp;
+    dfalpha_ddalpha -= dt * theta * ddalpha_dalpha;
+    ++niter;
+}

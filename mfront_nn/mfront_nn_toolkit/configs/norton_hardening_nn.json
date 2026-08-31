@@ -1,0 +1,64 @@
+{
+  "_comment": "norton_hardening_nn: isotropic hardening, phi2(sigma, p) -> (depsp, dp, Jac6)",
+
+  "behaviour": "norton_hardening_nn",
+  "author": "HELFER Thomas",
+  "date": "29 / 01 / 2026",
+  "description": "Norton viscoplasticity with isotropic hardening (scalar p).",
+
+  "dsl": "Implicit",
+  "modelling_hypothesis": "Tridimensional",
+  "algorithm": "NewtonRaphson",
+  "theta": 1.0,
+  "epsilon": 1e-14,
+  "profiling": true,
+
+  "tensorflow": {
+    "lib_path": "../../dependencies/libtensorflow-2.6.0/lib",
+    "model_path": "../../model/norton_hardening_nn"
+  },
+
+  "standard_elasticity": {
+    "enabled": true,
+    "young_modulus": 150e9,
+    "poisson_ratio": 0.3
+  },
+
+  "state_variables": [
+    {
+      "name": "evp",
+      "type": "StrainStensor",
+      "glossary_name": "ViscoplasticStrain"
+    },
+    {
+      "name": "p",
+      "type": "strain",
+      "entry_name": "p"
+    }
+  ],
+
+  "aux_state_variables": [
+    { "name": "niter", "type": "real" }
+  ],
+
+  "nn_functions": [
+    {
+      "name": "phi2",
+      "signature_name": "phi2",
+      "inputs": [
+        { "name": "sigma", "tf_input": "phi2_sigma:0", "type": "stensor" },
+        { "name": "p",     "tf_input": "phi2_p:0",     "type": "scalar"  }
+      ],
+      "outputs": [
+        { "name": "depsp",        "tf_output": "PartitionedCall:4", "type": "stensor",  "index": 0 },
+        { "name": "dp",           "tf_output": "PartitionedCall:5", "type": "scalar",   "index": 1 },
+        { "name": "ddepsp_dsig",  "tf_output": "PartitionedCall:0", "type": "st2tost2", "index": 2 },
+        { "name": "ddepsp_dp",    "tf_output": "PartitionedCall:1", "type": "stensor",  "index": 3 },
+        { "name": "ddp_dsig",     "tf_output": "PartitionedCall:2", "type": "stensor",  "index": 4 },
+        { "name": "ddp_dp",       "tf_output": "PartitionedCall:3", "type": "scalar",   "index": 5 }
+      ]
+    }
+  ],
+
+  "integrator_template": "standard_elasticity_phi2_sigma_p"
+}

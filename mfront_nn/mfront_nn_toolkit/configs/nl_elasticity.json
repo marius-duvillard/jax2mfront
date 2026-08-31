@@ -1,0 +1,47 @@
+{
+  "_comment": "nl-elasticity: DefaultDSL, direct stress + tangent from strain via two NN signatures",
+
+  "behaviour": "NeuralElasticity",
+  "author": "Marius Duvillard",
+  "date": "18 / 12 / 2025",
+  "description": "Non-linear elasticity: stress and tangent operator from a single TF model.",
+
+  "dsl": "DefaultDSL",
+  "modelling_hypothesis": "Tridimensional",
+  "provides_tangent_operator": true,
+
+  "tensorflow": {
+    "lib_path": "../../dependencies/libtensorflow-2.6.0/lib",
+    "model_path": "../../model/nl_model"
+  },
+
+  "standard_elasticity": { "enabled": false },
+
+  "state_variables": [],
+  "aux_state_variables": [],
+
+  "nn_functions": [
+    {
+      "name": "stress",
+      "signature_name": "stress",
+      "inputs": [
+        { "name": "strain", "tf_input": "stress_epsilon:0", "type": "stensor" }
+      ],
+      "outputs": [
+        { "name": "sig", "tf_output": "PartitionedCall:0", "type": "stensor", "index": 0 }
+      ]
+    },
+    {
+      "name": "tangentop",
+      "signature_name": "tangentop",
+      "inputs": [
+        { "name": "strain", "tf_input": "tangentop_epsilon:0", "type": "stensor" }
+      ],
+      "outputs": [
+        { "name": "K", "tf_output": "PartitionedCall_1:0", "type": "st2tost2", "index": 0 }
+      ]
+    }
+  ],
+
+  "integrator_template": "nl_elasticity"
+}

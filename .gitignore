@@ -1,6 +1,7 @@
-# Exclude include and src directories
+# Exclude castem, include and src directories
 **/include/
 **/src/
+**/castem
 
 # Exclude folders starting with cppflow and libtensorflow
 cppflow*/
@@ -16,3 +17,14 @@ __pycache__/
 *.pyd
 *.swp
 *.DS_Store
+
+# images
+*.png
+
+# result files
+*.result
+
+# Environment
+*.venv
+
+.omo/
